@@ -1,0 +1,18 @@
+---
+# Setting up Let's Encrypt for non-prod environments.
+
+- name: Install certbot
+  get_url:
+    url: https://dl.eff.org/certbot-auto
+    dest: /usr/local/bin/certbot-auto
+    mode: 0755
+
+- name: Stop nginx to ensure certbot can bind to port 80
+  service:
+    name: nginx
+    state: stopped
+
+- name: Generate new certificate
+  shell: /usr/local/bin/certbot-auto certonly --noninteractive --no-bootstrap --agree-tos --email support@linkdigital.com.au --standalone -d {{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}
+  args:
+    creates: /etc/letsencrypt/live/{{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}/fullchain.pem

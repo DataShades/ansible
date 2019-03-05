@@ -1,0 +1,18 @@
+---
+- debug:
+    msg: "RDS-ID tag is NA so we will use a local Postgres service."
+  when: ansible_local.environment.rds_id == "NA"
+
+# Amazon Linux 1
+- include: postgres-al1.yml
+  when: ansible_local.environment.rds_id == "NA" and ansible_distribution == "Amazon" and ansible_distribution_version == "1" 
+
+# Amazon Linux 2
+- include: postgres-al2.yml
+  when: ansible_local.environment.rds_id == "NA" and ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+
+- debug:
+    msg: "RDS-ID tag is set so we will use an RDS."
+  when: ansible_local.environment.rds_id != "NA"
+- include: rds.yml
+  when: ansible_local.environment.rds_id != "NA"

@@ -1,0 +1,69 @@
+---
+# tasks file for datashades.common
+
+# Fix for constant yum lock errors whenever yum is called via Ansible on AL2
+- name: Disable update-motd yum plugin
+  ini_file:
+    path: /etc/yum/pluginconf.d/update-motd.conf
+    section: main
+    option: enabled
+    value: "0"
+    no_extra_spaces: yes
+
+- name: Update OS packages
+  yum:
+    name: '*'
+    state: latest
+  tags:
+    - common_yum-update
+
+- name: Set the server timezone
+  timezone:
+    name: "{{ datashades_common_timezone }}"
+  notify:
+    - restart crond
+    - restart chronyd
+  tags:
+    - common_timezone
+
+- name: Enable EPEL Yum repository (Amazon Linux 2)
+  shell: amazon-linux-extras install epel -y
+  args:
+    creates: /etc/yum.repos.d/epel.repo
+
+- name: Install packages required for use later (xfsprogs, yum-cron, expect)
+  yum:
+    name: 
+      - xfsprogs
+      - yum-cron
+      - expect
+      - git
+      - gcc
+    state: latest
+  tags:
+    - common_yum-install
+
+- name: Enable yum-cron on boot
+  service:
+    name: yum-cron
+    enabled: yes
+  notify:
+    - restart yum-cron
+  tags:
+    - common_yum-cron-enable
+
+- name: Enable Nano syntax highlighting
+  copy:
+    src: nanorc
+    dest: /etc/nanorc
+    force: yes
+    backup: yes
+  tags:
+    - common_nano-config
+
+- name: Add custom Bash profile for Datashades
+  copy:
+    src: datashades-bash-profile
+    dest: /etc/profile.d/datashades.sh
+  tags:
+    - common_bash-profile

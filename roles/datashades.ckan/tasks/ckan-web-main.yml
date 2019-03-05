@@ -1,0 +1,7 @@
+---
+
+- include: ckan-web-al1.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "1"
+
+- include: ckan-web-al2.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

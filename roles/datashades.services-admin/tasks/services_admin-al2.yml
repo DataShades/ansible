@@ -1,0 +1,137 @@
+---
+# tasks file for datashades.services-admin-scripts
+
+- name: Install required packages that are no default on AL2
+  yum:
+    name:
+     - python-boto
+     - python-pip
+     - python-virtualenv
+    state: latest
+
+- name: Set hostname
+  hostname:
+    name: "{{ ansible_local.dns.dns_name }}"
+
+- name: Copy hostnames template
+  template:
+    src: hostnames.j2
+    dest: /etc/hostnames
+  tags:
+    - services-admin_hostnames
+
+- name: Copy listwebhosts script
+  copy:
+    src: listwebhosts
+    dest: /usr/local/bin/listwebhosts
+    mode: 0755
+  tags:
+    - services-admin_listwebhosts
+
+- name: Copy updatedns script
+  copy:
+    src: updatedns
+    dest: /sbin/updatedns
+    mode: 0755
+  tags:
+    - services-admin_updatedns
+
+- name: Copy SSH key for web host access via listwebhosts
+  copy:
+    src: "{{ ansible_ssh_private_key_file }}"
+    dest: /root/.ssh/webhost.pem
+    mode: 0600
+  tags:
+    - services-admin_private-key
+
+- name: Add updatedns to rc.local
+  lineinfile:
+    path: /etc/rc.local
+    line: "/sbin/updatedns"
+    state: present
+  tags:
+    - services-admin_updatedns-rclocal
+
+- name: Add execute permissions to rc.local
+  file:
+    path: /etc/rc.d/rc.local
+    mode: 0755
+
+- name: Ensure EBS volumes are tagged and formatted.
+  script: volumes_sh
+
+- name: Copy backup scripts
+  block:
+    - copy:
+        src: backup-scripts/ebs_backup_daily
+        dest: /root/ebs_backup_daily
+        mode: 0755
+    - copy:
+        src: backup-scripts/ebs_backup_monthly
+        dest: /root/ebs_backup_monthly
+        mode: 0755
+      when: ansible_local.environment.environment_type == "prod"
+    - copy:
+        src: backup-scripts/ebs_backup_yearly
+        dest: /root/ebs_backup_yearly
+        mode: 0755
+      when: ansible_local.environment.environment_type == "prod"
+    - copy:
+        src: backup-scripts/efs_sync
+        dest: /root/efs_sync
+        mode: 0755
+      when: ansible_local.environment.efs_id != "NA"
+
+- name: Enable backup crons
+  block:
+    - cron:
+        name: "Daily backup"
+        cron_file: /etc/crontab
+        user: root
+        job: "/root/ebs_backup_daily >> /var/log/ebs_daily.log 2>&1"
+        minute: 0
+        hour: 1
+    - cron:
+        name: "Monthly backup"
+        cron_file: /etc/crontab
+        user: root
+        job: "/root/ebs_backup_monthly >> /var/log/ebs_monthly.log 2>&1"
+        minute: 20
+        hour: 1
+        day: 1
+      when: ansible_local.environment.environment_type == "prod"
+    - cron:
+        name: "Yearly backup"
+        cron_file: /etc/crontab
+        user: root
+        job: "/root/ebs_backup_yearly >> /var/log/ebs_yearly.log 2>&1"
+        minute: 40
+        hour: 0
+        day: 1
+        month: 1
+      when: ansible_local.environment.environment_type == "prod"
+    - cron:
+        name: "EFS Backup"
+        cron_file: /etc/crontab
+        user: root
+        job: "root /root/efs_sync >> /var/log/efs_sync.log 2>&1"
+        minute: 0
+        hour: 0
+      when: ansible_local.environment.efs_id != "NA"
+
+- name: Create CKAN group
+  group:
+    name: ckan
+    state: present
+    #gid: 1000
+
+- name: Create CKAN user
+  user:
+    name: ckan
+    shell: /sbin/nologin
+    #uid: 1000
+    groups:
+      - ckan
+      - apache
+
+- include: filesystem.yml

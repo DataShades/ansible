@@ -1,0 +1,132 @@
+---
+# tasks file for datashades.webmaster-admin-scripts
+
+- name: Install required packages that are not part of default AL2
+  yum:
+    name: 
+      - python-boto
+      - python-pip
+      - python-virtualenv
+    state: latest
+
+- name: Copy chkdns script
+  copy:
+    src: chkdns
+    dest: /sbin/chkdns
+    mode: 0755
+  when: ansible_local.environment.environment_type != "prod"
+  tags:
+    - webmaster-admin_chkdns
+
+- name: Add chkdns script to rc.local
+  lineinfile:
+    path: /etc/rc.local
+    line: "/sbin/chkdns"
+    state: present
+  when: ansible_local.environment.environment_type != "prod"
+  tags:
+    - webmaster-admin_updatedns-chkdns
+
+- name: Add execute permissions to rc.local
+  file:
+    path: /etc/rc.d/rc.local
+    mode: 0755
+
+- name: Execute chkdns script
+  shell: /sbin/chkdns
+  when: ansible_local.environment.environment_type != "prod"
+
+- name: For non-prod environment, pause for a short time to help prevent Let's Encrypt verify failure later.
+  pause:
+    seconds: 30
+  when: ansible_local.environment.environment_type != "prod"
+
+- name: Copy updateasg script
+  copy: 
+    src: updateasg
+    dest: /sbin/updateasg
+    mode: 0755
+
+- name: Create CKAN group
+  group:
+    name: ckan
+    state: present
+    gid: 1500
+
+- name: Create CKAN user
+  user:
+    name: ckan
+    shell: /sbin/nologin
+    uid: 1500
+    groups: 
+      - ckan
+      - apache
+   
+- name: Create NFS directories
+  file:
+    path: /var/shared_content
+    state: directory
+    owner: apache
+    group: apache
+    mode: 0775
+
+- name: Mount EFS
+  block:
+    - mount:
+        name: /var/shared_content
+        src: "{{ ansible_local.environment.efs_id }}.efs.{{ ansible_local.environment.aws_region }}.amazonaws.com:/shared_content"
+        fstype: nfs4
+        opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+        state: mounted
+    - mount:
+        name: /var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan
+        src: "{{ ansible_local.environment.efs_id }}.efs.{{ ansible_local.environment.aws_region }}.amazonaws.com:/logs/apache/{{ ansible_local.environment.environment_type }}_ckan"
+        fstype: nfs4
+        opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+        state: mounted
+    - mount:
+        name: /var/log/nginx/{{ ansible_local.environment.environment_type }}_ckan
+        src: "{{ ansible_local.environment.efs_id }}.efs.{{ ansible_local.environment.aws_region }}.amazonaws.com:/logs/nginx/{{ ansible_local.environment.environment_type }}_ckan"
+        fstype: nfs4
+        opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+        state: mounted        
+  when: ansible_local.environment.efs_id != "NA"
+
+- name: Mount NFS
+  block:
+    - mount:
+        name: /var/shared_content
+        src: "{{ ansible_local.environment.environment_type }}nfs.{{ ansible_local.dns.hosted_zone }}:/data/nfs/shared_content"
+        fstype: nfs
+        opts: rw,hard,intr
+        state: mounted
+    - mount:
+        name: /var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan
+        src: "{{ ansible_local.environment.environment_type }}nfs.{{ ansible_local.dns.hosted_zone }}:/data/nfs/logs/apache/{{ ansible_local.environment.environment_type }}_ckan"
+        fstype: nfs
+        opts: rw,hard,intr
+        state: mounted
+    - mount:
+        name: /var/log/nginx/{{ ansible_local.environment.environment_type }}_ckan
+        src: "{{ ansible_local.environment.environment_type }}nfs.{{ ansible_local.dns.hosted_zone }}:/data/nfs/logs/nginx/{{ ansible_local.environment.environment_type }}_ckan"
+        fstype: nfs
+        opts: rw,hard,intr
+        state: mounted
+  when: ansible_local.environment.efs_id == "NA"
+
+- name: Copy backup script for DEV/UAT (no scaling group, no AMI)
+  copy:
+    src: backup-scripts/ebs_backup_daily
+    dest: /root/ebs_backup_daily
+    mode: 0755
+  when: ansible_local.environment.environment_type != "prod"
+
+- name: Enable backup cron for DEV/UAT
+  cron:
+        name: "Daily backup"
+        cron_file: /etc/crontab
+        user: root
+        job: "/root/ebs_backup_daily >> /var/log/ebs_daily.log 2>&1"
+        minute: 0
+        hour: 9
+  when: ansible_local.environment.environment_type != "prod"

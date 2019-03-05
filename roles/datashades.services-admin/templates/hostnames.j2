@@ -1,0 +1,8 @@
+services_name={{ ansible_local.environment.environment_type }}services.{{ ansible_local.dns.hosted_zone }}
+nfs_name={{ ansible_local.environment.environment_type }}nfs.{{ ansible_local.dns.hosted_zone }}
+redis_name={{ ansible_local.environment.environment_type }}redis.{{ ansible_local.dns.hosted_zone }}
+solr_name={{ ansible_local.environment.environment_type }}solr.{{ ansible_local.dns.hosted_zone }}
+mysql_name={{ ansible_local.environment.environment_type }}mysql.{{ ansible_local.dns.hosted_zone }}
+{% if ansible_local.environment.rds_id == "NA" %}
+postgres_name={{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}
+{% endif %}

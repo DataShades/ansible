@@ -1,0 +1,33 @@
+---
+# tasks file for datashades.redis
+#
+# This is the same process as the Amazon Linux 1 role, however this can be updated to use Redis 4.0
+# on Amazon Linux 2 in future with less effort.
+#
+- name: Install Redis
+  yum:
+    name: redis
+    state: latest
+
+- name: Enable Redis to listen for remote connections
+  lineinfile:
+    path: /etc/redis.conf
+    regexp: '^bind 127.0.0.1'
+    line: "#bind"
+    backrefs: yes
+  notify: restart redis
+  tags: redis_config
+
+- name: Disable protected mode 
+  lineinfile:
+    path: /etc/redis.conf
+    regexp: '^protected-mode yes'
+    line: "protected-mode no"
+    backrefs: yes
+  notify: restart redis
+  tags: redis_config
+
+- name: Enable Redis on boot
+  systemd:
+    name: redis
+    enabled: yes

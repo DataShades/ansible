@@ -1,0 +1,9 @@
+---
+# tasks file for datashades.postgres
+
+- name: Install PostgreSQL related packages
+  yum:
+    name: 
+      - python-psycopg2
+      - postgresql
+    state: latest

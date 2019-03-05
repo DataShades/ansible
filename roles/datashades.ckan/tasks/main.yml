@@ -1,0 +1,10 @@
+---
+# tasks file for datashades.ckan
+
+# If this is a web instance, set up CKAN fully
+- include: ckan-web-main.yml
+  when: host_type == "web"
+
+# If this is a services instance, install a basic CKAN virtualenv and add a ckan-worker to Supervisor.
+- include: ckan-worker-main.yml
+  when: host_type == "services"

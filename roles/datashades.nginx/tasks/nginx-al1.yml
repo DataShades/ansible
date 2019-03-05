@@ -1,0 +1,50 @@
+---
+# tasks file for datashades.nginx
+- name: Install Nginx
+  yum:
+    name:
+      - nginx
+
+- name: Enable Nginx on boot
+  service:
+    name: nginx
+    enabled: yes
+  tags:
+    nginx_enable-boot
+
+- name: Create logging directory.
+  file:
+    path: /var/log/nginx/{{ ansible_local.environment.environment_type }}_ckan
+    state: directory
+    owner: nginx
+    group: nginx
+  tags:
+    - nginx_logging-directory
+
+- name: Remove default_server from nginx.conf IPv4
+  lineinfile:
+    path: /etc/nginx/nginx.conf
+    regexp: '^\s+listen\s+80 default_server;$'
+    line: "\tlisten\t80;"
+    backrefs: yes
+  notify: restart nginx
+  tags:
+    - nginx_default-server
+
+- name: Remove default_server from nginx.conf IPv6
+  lineinfile:
+    path: /etc/nginx/nginx.conf
+    regexp: '^\s+listen\s+\[::\]:80 default_server;$'
+    line: "\tlisten\t[::]:80;"
+    backrefs: yes
+  notify: restart nginx
+  tags:
+    - nginx_default-server
+
+- include: letsencrypt.yml
+  when: ansible_local.environment.environment_type != "prod"
+
+- name: Start Nginx
+  service:
+    name: nginx
+    state: restarted

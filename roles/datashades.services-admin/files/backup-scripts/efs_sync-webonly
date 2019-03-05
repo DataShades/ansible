@@ -1,0 +1,23 @@
+# We need to determine if we are the prod-web-master instance (i.e. most recently launched)
+# and only run if that is true.
+#
+# This is to avoid making double-snapshots of the data volume.
+
+# Change this variable to the hostname of the "master" web instance.
+MasterHostname="master.hostname.com"
+
+Date=$(date)
+
+LocalPublicHostname=$(wget -q -O - http://169.254.169.254/latest/meta-data/public-hostname)
+MasterIpHostname=$(dig +short "$MasterHostname" @8.8.8.8 | grep ec2)
+
+if [ "$LocalPublicHostname." == "$MasterIpHostname" ]; then
+        echo "$Date //"
+        echo "This is the master server! Running EFS sync and snapshot now..."
+        rsync -avz /data/efs/logs/* /data/efs_backup/logs/. --delete
+        rsync -avz /data/efs/shared_content/* /data/efs_backup/shared_content/. --delete
+        /root/ebs_backup_daily
+else
+        echo "$Date //"
+        echo "This is not the master server, skipping."
+fi

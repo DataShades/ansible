@@ -1,0 +1,35 @@
+#!/usr/bin/python
+#
+# Create DB resources and permissions for CKAN Datastore extension
+#
+
+{% set postgres_user = 'postgres' if (ansible_local.environment.rds_id  == "NA") else 'ckan_dba' %}
+
+import sys
+sys.path.append("/usr/lib/ckan/default/lib/python2.7/site-packages")
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+try:
+    conn = psycopg2.connect("dbname='postgres' user='{{ postgres_user }}' host='{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}' password='{{ ansible_local.environment.db_password }}'")
+except:
+    sys.exit(1)
+
+conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+
+cur = conn.cursor()
+cur.execute("""CREATE ROLE ckan_default WITH PASSWORD '{{ ansible_local.environment.db_password }}' LOGIN;""")
+cur.execute("""GRANT ckan_default to {{ postgres_user }};""")
+#cur.execute("""GRANT rds_superuser to ckan_default;""")
+
+cur.execute("""GRANT all privileges on all tables in schema public to ckan_default;""")
+cur.execute("""GRANT all privileges on all sequences in schema public to ckan_default;""")
+cur.execute("""ALTER default privileges in schema public grant all privileges on tables to ckan_default;""")
+cur.execute("""ALTER default privileges in schema public grant all privileges on sequences to ckan_default;""")
+
+cur.execute("""DROP DATABASE IF EXISTS ckan_default;""")
+cur.execute("""CREATE DATABASE ckan_default WITH OWNER ckan_default ENCODING 'utf-8';""")
+
+conn.commit()
+cur.close()
+conn.close()

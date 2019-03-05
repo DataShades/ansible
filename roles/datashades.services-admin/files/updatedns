@@ -1,0 +1,86 @@
+#!/bin/bash
+ 
+echo "Refreshing DNS"
+ 
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=$(echo ${placement%?})
+ 
+myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+zone_id=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=ZoneID" | jq '.Tags[].Value' | tr -d '"')
+if [ -z $zone_id ] && [ -e /etc/awszoneid ]; then
+        zone_id=$(cat /etc/awszoneid | grep zoneid | cut -d'=' -f 2)
+fi
+ 
+if [ -z $zone_id ]; then
+        echo "No AWS Zone ID configured"
+        exit 0;
+fi
+ 
+config_file=/etc/hostnames
+ 
+function update_dns
+{
+    local dns_name=$1
+        local dns_type=$2
+ 
+    local currec=$(aws route53 list-resource-record-sets --hosted-zone-id ${zone_id} --query "ResourceRecordSets[?contains(Name, '${dns_name}')].ResourceRecords[0].Value" | jq '.[0]' | tr -d '"')
+        local pub_host=$(wget -q -O - http://169.254.169.254/latest/meta-data/public-hostname)
+ 
+        # Create a cluster node Alias record based on record type
+        #
+        name=`echo ${dns_name} | cut -d'.' -f 1`
+        alias=`printf '%s\n' "${dns_name//[[:digit:]]/}" | cut -d'.' -f 1`
+        tld=`echo ${dns_name} | cut -d'.' -f 2-`
+ 
+        # We always need a base DNS record even for the failover records to point to, so always create it
+        #
+        if [ "${pub_host}" != "${currec}" ]; then
+                route53 change_record ${zone_id} ${dns_name} CNAME ${pub_host} 60
+        fi
+ 
+        # Create cluster alias records as applicable
+        #
+        if [[ "${dns_type}" == *"_master"*  ]]; then
+                cli53 rrcreate -i ${dns_type} --failover PRIMARY ${tld} "${alias} AWS ALIAS CNAME ${name} \$self true"
+        elif [[ "${dns_type}" == *"_slave"*  ]]; then
+                cli53 rrcreate -i ${dns_type} --failover SECONDARY ${tld} "${alias} AWS ALIAS CNAME ${name} \$self true"
+        fi
+ 
+}
+ 
+function update_hostname
+{
+        local dns_name=$1
+ 
+        if [ ! -z ${dns_name} ]; then
+            if [ ! hostname == $dns_name ]; then
+#                   echo "Updating hostname to $dns_name"
+                        hostname $dns_name
+            fi
+ 
+                update_dns $1
+        fi
+}
+ 
+ 
+i=0
+while read line; do
+        if [[ "$line" =~ ^[^#]*= ]]; then
+                name[i]=`echo $line | cut -d'=' -f 1`
+                value[i]=`echo $line | cut -d'=' -f 2`
+                ((i++))
+        fi
+done < ${config_file}
+ 
+i=0
+for varname in "${name[@]}"
+        do
+                if [ ${varname} = "dns_name" ]; then
+                        update_hostname ${value[i]}
+                else
+                        update_dns ${value[i]} ${name[i]}
+                fi
+                ((i++))
+        done
+ 
+exit 0

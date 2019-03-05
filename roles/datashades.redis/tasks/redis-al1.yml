@@ -1,0 +1,30 @@
+---
+# tasks file for datashades.redis
+
+- name: Install Redis
+  yum:
+    name: redis
+    state: latest
+
+- name: Enable Redis to listen for remote connections
+  lineinfile:
+    path: /etc/redis.conf
+    regexp: '^bind 127.0.0.1'
+    line: "#bind"
+    backrefs: yes
+  notify: restart redis
+  tags: redis_config
+
+- name: Disable protected mode 
+  lineinfile:
+    path: /etc/redis.conf
+    regexp: '^protected-mode yes'
+    line: "protected-mode no"
+    backrefs: yes
+  notify: restart redis
+  tags: redis_config
+
+- name: Enable Redis on boot
+  service:
+    name: redis
+    enabled: yes

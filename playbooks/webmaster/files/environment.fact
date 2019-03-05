@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Datashades v2.0 - Environment custom Ansible facts
+
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=$(echo ${placement%?})
+myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+
+# Get the environment type (dev|uat|prod)
+environment=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=StackType" | jq '.Tags[].Value' | tr -d '"')
+hosted_zone=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=HostedZone" | jq '.Tags[].Value' | tr -d '"')
+
+efs=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=EFS-ID" | jq '.Tags[].Value' | tr -d '"')
+rds=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=RDS-ID" | jq '.Tags[].Value' | tr -d '"')
+elb=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=ELB-ID" | jq '.Tags[].Value' | tr -d '"')
+
+ssm_name="${environment}pg.${hosted_zone}"
+db_password=$(aws ssm get-parameter --region $region --name $ssm_name | jq '.Parameter.Value' | tr -d '"')
+
+echo "{"
+echo "  \"environment_type\" : \"${environment}\"," | tr '[:upper:]' '[:lower:]'
+echo "  \"aws_region\" : \"${region}\","
+echo "  \"efs_id\" : \"${efs}\","
+echo "  \"rds_id\" : \"${rds}\","
+echo "  \"elb_id\" : \"${elb}\","
+echo "  \"db_password\" : \"${db_password}\""
+echo "}"

@@ -1,0 +1,15 @@
+# This is a simple script to ensure any content on an EFS volume is
+# copied to the local EBS volume so it can be included in the normal
+# backup snapshot.
+#
+# Note, this is only required until AWS Backup is supported in all
+# regions.
+
+#!/bin/bash
+
+Date=$(date)
+
+echo "$Date //"
+echo "Running EFS sync and snapshot now..."
+rsync -avz /data/efs/logs/* /data/efs_backup/logs/. --delete
+rsync -avz /data/efs/shared_content/* /data/efs_backup/shared_content/. --delete

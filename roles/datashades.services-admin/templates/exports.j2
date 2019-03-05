@@ -1,0 +1,3 @@
+{{ fs_path }}/shared_content {{ ansible_local.network.vpc_cidr }}(rw,sync,no_subtree_check,no_root_squash)
+{{ fs_path }}/logs/nginx {{ ansible_local.network.vpc_cidr }}(rw,sync,no_subtree_check,no_root_squash)
+{{ fs_path }}/logs/apache {{ ansible_local.network.vpc_cidr }}(rw,sync,no_subtree_check,no_root_squash)

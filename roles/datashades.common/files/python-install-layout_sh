@@ -1,0 +1,6 @@
+# Python Installation used for RPM packaging on Amazon Linux AMI.
+# This is equivalent to passing '--install-layout=amzn' to setup.py
+# during the 'install' step
+
+# export PYTHON_INSTALL_LAYOUT="amzn"
+unset PYTHON_INSTALL_LAYOUT

@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+# This script is to ensure the consistent backup of our EBS volume onto Amazon Simple Storage Service via snapshots
+
+# Script paramaters
+
+days=30
+
+echo -e "Automated Daily Snapshot of Important Volumes\r\n"
+
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=$(echo ${placement%?})
+
+myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+
+volumes=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="${myid}" Name=attachment.delete-on-termination,Values=false --region $region)
+vol_id=$(echo ${volumes} | jq '.Volumes[].VolumeId' | tr -d '"')
+
+# Define new array for volume names and IDs, to be filled from the volume ID query above.
+vol_names=()
+vol_ids=()
+counter=0
+for id in $vol_id
+do
+        # Populate two arrays, one contains the volume IDs to be snapshotted, and the second containing the names for use later.
+        vol_ids[$counter]=$id
+        vol_names[$counter]=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=$id" "Name=key,Values=Name" | jq '.Tags[].Value' | tr -d '"')
+	
+	# If the volume has no name, use the volume ID for the snapshot description instead
+	if [ -z ${vol_names[$counter]} ]; then
+		vol_names[$counter]=$id
+	fi
+        ((counter++))
+done
+
+DESC_DATE=$(date +"%Y-%m-%d_%H:%M:%S")
+LOG_DATE=$(date +"%b %d %R:%S")
+
+process=0
+while [ $process -lt $counter ]
+do
+        Description="Automated Daily - ${vol_names[$process]} snapshot - "${DESC_DATE}
+
+        echo "$LOG_DATE Creating snapshot of ${vol_names[$process]} on ${vol_ids[$process]} in $region with Description: ${Description}" >> /var/log/ebs_backups.log
+        aws ec2 create-snapshot --volume-id ${vol_ids[$process]} --description "${Description}" --region $region --output text >> /var/log/ec2snapshot.log
+        ((process++))
+done
+
+# Reset process variable for next loop
+process=0
+
+# Purge old backups
+OLD='`'$(date +%Y-%m-%d --date "$days days ago")'`'
+
+# get snapshot id for all snapshots older than $OLD
+while [ $process -lt $counter ]
+do
+        snap_ids=$(aws ec2 describe-snapshots --region $region --filters Name=description,Values="Automated Daily - ${vol_names[$process]} *" --query "Snapshots[?StartTime<$OLD]" | jq '.[].SnapshotId' | tr -d '"')
+        if [ ${#snap_ids} -gt 0 ]; then
+                readarray snapshots <<< "${snap_ids}"
+
+                for snapshot in "${snapshots[@]}"
+                do
+                                echo "Deleting snapshot $snapshot"
+                                aws ec2 delete-snapshot --snapshot-id $snapshot --region $region >> /var/log/snapshot_purge.log
+                done
+        else
+                echo "No snapshots to purge"
+        fi
+        ((process++))
+done

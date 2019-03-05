@@ -1,0 +1,10 @@
+---
+# tasks file for datashades.php
+
+# Include Amazon Linxu 1 tasks
+- include: php-al1.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "1"
+
+# Include Amazon Linux 2 tasks
+- include: php-al2.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

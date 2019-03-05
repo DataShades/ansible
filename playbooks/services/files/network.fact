@@ -1,0 +1,50 @@
+#!/bin/bash
+#
+# Datashades v2.0 - Network facts
+#
+# Outputs CIDR block, VPC ID, Subnet ID and attached security groups
+#
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=$(echo ${placement%?})
+localip=$(wget -q -O - http://169.254.169.254/latest/meta-data/local-ipv4 | cut -d '.' -f1,2)
+instanceid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+
+# Lists all VPCs in the account
+vpcs=$(aws ec2 describe-vpcs --region ${region})
+
+# Determines the CIDR block of the current VPC by using the current local IP.
+cidr=$(echo $vpcs | jq '.Vpcs[].CidrBlock' | tr -d '"' | grep ${localip})
+
+# Using the previously determined CIDR block we can query the speciifc VPC we are currenntly inside.
+vpcid=$(aws ec2 describe-vpcs --region ${region} --filters "Name=cidr-block-association.cidr-block,Values=$cidr" | jq '.Vpcs[].VpcId' | tr -d '"')
+
+# Knowing the VPC ID we can now query our current VPC to find out the subnets associated.
+subnet=$(aws ec2 describe-subnets --region ${region} --filters "Name=vpc-id,Values=$vpcid" | jq '.Subnets[].SubnetId' | tr -d '"')
+subnets=( $subnet )
+
+# Query the EC2 metadata for the attached security group names
+secgrp_id=$(aws ec2 describe-instances --region $region --filters "Name=instance-id,Values=$instanceid" | jq '.Reservations[].Instances[].SecurityGroups[].GroupId' | tr -d '"')
+secgrp_ids=( $secgrp_id )
+
+# Loop through the security group list (ideally we only want 1 but this should allow edge cases) and format them for insertion into the JSON below.
+for i in "${secgrp_ids[@]}"
+do
+        if [ -z "$secgrps" ]
+        then
+                secgrps="\"$i\""
+        else
+                secgrps+=", \"$i\""
+        fi
+done
+
+# Output all of the results in JSON format for Ansible.
+echo "{"
+echo "  \"vpc_cidr\" : \"${cidr}\","
+echo "  \"vpc_id\" : \"${vpcid}\","
+echo "  \"subnet_ids\" : [{"
+echo "    \"subnet1\" : \"${subnets[0]}\","
+echo "    \"subnet2\" : \"${subnets[1]}\","
+echo "    \"subnet3\" : \"${subnets[2]}\""
+echo "  }],"
+echo "  \"sg_id\" : [ ${secgrps} ]"
+echo "}"

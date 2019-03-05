@@ -1,0 +1,28 @@
+---
+# tasks file for datashades.supervisor
+
+- name: Install Supervisor via pip
+  pip:
+    name: supervisor
+
+- name: Copy Supervisor init script
+  copy:
+    src: supervisor.init
+    dest: /etc/init.d/supervisor
+    mode: 0755
+
+- name: Create supervisor.d directory
+  file:
+    path: /etc/supervisor.d
+    state: directory
+
+- name: Create Supervisor config file
+  copy:
+    src: supervisord.conf
+    dest: /etc/supervisord.conf
+  notify: restart supervisor
+
+- name: Enable Supervisor on boot
+  service:
+    name: supervisor
+    enabled: yes

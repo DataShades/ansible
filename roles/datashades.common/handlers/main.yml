@@ -1,0 +1,13 @@
+---
+# handlers file for datashades.common
+- name: restart crond
+  service: name=crond state=restarted
+
+- name: restart ntpd
+  service: name=ntpd state=restarted
+
+- name: restart yum-cron
+  service: name=yum-cron state=restarted
+
+- name: restart chronyd
+  service: name=chronyd state=restarted

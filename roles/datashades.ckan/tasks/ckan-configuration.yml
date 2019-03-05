@@ -1,0 +1,159 @@
+---
+# Make required changes to the newly generated GKAN configuration file.
+# Split into a separate file to aide readability.
+
+- name: Set site URL fact if prod environment type.
+  set_fact: 
+    site_url: "https://{{ ansible_local.environment.environment_type }}.{{ ansible_local.dns.hosted_zone }}"
+  when: ansible_local.environment.elb_id != "NA"
+
+- name: Set site URL fact if dev or uat environment type.
+  set_fact: 
+    site_url: "https://{{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}"
+  when: ansible_local.environment.elb_id == "NA"
+
+# Create default config file.
+- name: Generate default CKAN configuration file.
+  command: /usr/lib/ckan/default/bin/paster make-config ckan /etc/ckan/default/production.ini
+  args:
+    creates: /etc/ckan/default/production.ini
+  tags: ckan_make-config
+
+- name: Symlink who.ini
+  file:
+    src: /usr/lib/ckan/default/src/ckan/who.ini
+    dest: /etc/ckan/default/who.ini
+    owner: ckan
+    group: ckan
+    state: link
+  when: host_type == "web"
+
+# Set up required configuration values
+- name: Postgres URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: sqlalchemy.url
+    value: postgresql://ckan_default:{{ ansible_local.environment.db_password }}@{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}/ckan_default
+  notify: restart httpd
+  tags: ckan_config-postgres
+
+- name: Datastore write URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.datastore.write_url
+    value: postgresql://ckan_datastore_rw:{{ ansible_local.environment.db_password }}@{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}/ckan_datastore
+  notify: restart httpd
+
+- name: Datastore read-only URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.datastore.read_url
+    value: postgresql://ckan_datastore_ro:{{ ansible_local.environment.db_password }}@{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}/ckan_datastore
+  notify: restart httpd
+
+- name: CKAN site URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.site_url
+    value: "{{ site_url }}"
+  notify: restart httpd
+
+- name: Set CKAN root path if Drupal is being installed too.
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.root_path
+    value: !unsafe '/data/{{LANG}}'
+  when: drupal == "yes"
+
+- name: Solr URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: solr_url
+    value: http://{{ ansible_local.environment.environment_type }}solr.{{ ansible_local.dns.hosted_zone }}:8983/solr/{{ ansible_local.environment.environment_type }}_ckan
+  notify: restart httpd
+
+- name: Redis URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.redis.url
+    value: redis://{{ ansible_local.environment.environment_type }}redis.{{ ansible_local.dns.hosted_zone }}:6379/0
+  notify: restart httpd
+
+- name: CKAN plugins
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.plugins
+    value: stats text_view image_view recline_view datastore datapusher resource_proxy
+  notify: restart httpd
+
+- name: CKAN storage
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.storage_path
+    value: /var/shared_content/{{ ansible_local.environment.environment_type }}_ckan
+  notify: restart httpd
+
+- name: CKAN storage resource size
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.max_resource_size
+    value: "10"
+  notify: restart httpd
+
+- name: CKAN storage image size
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.max_image_size
+    value: "2"
+  notify: restart httpd
+
+- name: Datapusher formats
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.datapusher.formats
+    value: csv xls xlsx tsv application/csv application/vnd.ms-excel application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  notify: restart httpd
+
+- name: Datapusher URL
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.datapusher.url
+    value: http://{{ ansible_local.environment.environment_type }}services.{{ ansible_local.dns.hosted_zone }}:8800/
+  notify: restart httpd
+
+- name: Datapusher assume stale task
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.datapusher.assume_task_stale_after
+    value: "3600"
+  notify: restart httpd
+
+- name: Resource proxy max size
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.resource_proxy.max_file_size
+    value: "1048576"
+  notify: restart httpd
+
+- name: Resource proxy chunk size
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.resource_proxy.chunk_size
+    value: "4096"
+  notify: restart httpd

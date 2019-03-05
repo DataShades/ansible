@@ -1,0 +1,84 @@
+#!/bin/bash
+
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=${placement%?}
+
+# Get the current instance ID
+instanceId=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+
+# Get instance data
+instanceData=$(aws ec2 describe-instances --region "$region" --instance-ids "$instanceId")
+
+# Get the current instance type
+instanceType=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-type)
+
+# Get the currently applied security groups
+securityGroups=$(echo "$instanceData" | jq '.Reservations[].Instances[].SecurityGroups[].GroupId' | tr -d '"')
+
+# Get the key pair name
+keyName=$(echo "$instanceData" | jq '.Reservations[].Instances[].KeyName' | tr -d '"')
+
+# Create a unique name for this AMI and launch configuration
+DATE=$(date +"%Y%m%d_%H%M")
+configName="AUTO-WEB-GM_${DATE}"
+
+# Set a description for the new AMI
+configDescription="Created via script at $DATE"
+
+echo ""
+echo "Beginning AMI creation with name '$configName'"
+echo ""
+
+# Creating AMI of current server
+AmiId=$(aws ec2 create-image --instance-id "$instanceId" --name "$configName" --description "$configDescription" --no-reboot --region "$region" | jq '.ImageId' | tr -d '"')
+
+# Outputting parameters for the launch configuration
+echo ""
+echo "Creating the launch configuration."
+echo ""
+
+# Creating the launch configuration with defining the key name to be used and security group
+launchId=$(aws autoscaling create-launch-configuration --launch-configuration-name "$configName" --image-id "$AmiId" --instance-type "$instanceType" --key-name "$keyName" --security-groups ${securityGroups} --region "$region")
+
+echo ""
+echo "The launch configuration has been created succesfully."
+echo ""
+
+# Get a list of Scaling Groups for user selectable update of launch config
+#
+AsgList=$(aws autoscaling describe-auto-scaling-groups --region "$region" | jq '.AutoScalingGroups[].AutoScalingGroupName' | tr -d '"')
+readarray Asgs <<< "${AsgList}"
+
+counter=1
+for Asg in "${Asgs[@]}"
+        do
+                AsgName=$(echo "$Asg" | tr -d '\n\r')
+                echo -e "[$counter] $AsgName"
+                (( counter++ ))
+        done
+
+echo "Select AutoScaleGroup to update. [0] to exit: "
+read -r AsgOpt
+
+# Exit if user doesn't want to update any Autoscale Groups
+#
+if [ "$AsgOpt" -eq 0 ]; then
+        echo "Update ASG with Launch configuration '$configName"
+        exit 0;
+fi
+
+# Make sure user really wants to update the selected ASG
+#
+Asg=$(echo "${Asgs[ ${AsgOpt} - 1 ]}" | tr -d '\n\r')
+printf "Update %s with Launch Configuration '$configName'? Type 'yes' to proceed: " "$Asg"
+read -r updateAsg
+
+if [ "$updateAsg" != 'yes' ]; then
+        echo "Update ASG with Launch configuration '$configName'"
+        exit 0
+fi
+
+# Updating the auto scaling group with new launch Conf
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$Asg" --launch-configuration-name "$configName" --region "$region"
+
+echo "The scaling group has been updated succesfully."

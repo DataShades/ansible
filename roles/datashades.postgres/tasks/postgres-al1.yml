@@ -1,0 +1,73 @@
+---
+# tasks file for datashades.postgres
+
+- name: Install the PostgreSQL server and related packages
+  yum:
+    name: 
+      - postgresql96
+      - postgresql96-server
+      - postgresql96-devel
+      - python27-psycopg2
+    state: latest
+
+- name: Check to ensure the PostgreSQL data directory exists.
+  block:
+    - stat:
+        path: /var/lib/pgsql96
+      register: pgsql_dir
+    - debug:
+        msg: "The path /var/lib/pgsql96 is a directory so we need to move it."
+      when: pgsql_dir.stat.isdir is defined and pgsql_dir.stat.isdir
+    - debug:
+        msg: "The path /var/lib/pgsql96 is a symlink already."
+      when: pgsql_dir.stat.islnk is defined and pgsql_dir.stat.islnk
+
+- name: Move the PostgreSQL data directory to /data/pgsql96
+  block:
+    - command: mv /var/lib/pgsql96 /data/pgsql96
+    - file:
+        src: /data/pgsql96
+        dest: /var/lib/pgsql96
+        state: link
+  when: pgsql_dir.stat.isdir is defined and pgsql_dir.stat.isdir
+
+- name: Initialise the PostgreSQL server
+  command: /etc/init.d/postgresql96 initdb creates=/data/pgsql96/data/postgresql.conf
+  tags: postgres_initdb
+
+- name: Enable the PostgreSQL server on boot
+  service:
+    name: postgresql96
+    enabled: yes
+
+- name: Set the PostgreSQL server to listen on all interfaces.
+  lineinfile:
+    path: /data/pgsql96/data/postgresql.conf
+    regexp: '^#?listen_addresses\s*='
+    line: "listen_addresses = '*'"
+    state: present
+    backrefs: yes
+  
+- name: Set the PostgreSQL auth to md5 for VPC connections.
+  lineinfile:
+    path: /data/pgsql96/data/pg_hba.conf
+    regexp: 'host\s+all\s+all\s+127.0.0.1/32\s+ident'
+    line: 'host all all {{ ansible_local.network.vpc_cidr }} md5'
+    backrefs: yes
+  tags: postgres_config-files
+
+- name: Restart PostgreSQL
+  service:
+    name: postgresql96
+    state: restarted
+
+- name: Set password for postgres user
+  become_user: postgres
+  become: yes
+  vars:
+    ansible_ssh_pipelining: true
+  postgresql_user:
+    db: postgres
+    name: postgres
+    password: "{{ ansible_local.environment.db_password }}"
+  tags: postgres_set-password

@@ -1,0 +1,67 @@
+---
+- hosts: provision-services
+  vars:
+    host_type: 'services'
+    drupal: 'no'
+  remote_user: ec2-user
+  become_user: root
+  become: yes
+  pre_tasks:
+    - name: Create custom facts directory
+      file:
+        path: "/etc/ansible/facts.d"
+        state: "directory"
+      tags:
+        - always
+
+    - name: Copy environment fact file
+      copy:
+        src: environment.fact
+        dest: /etc/ansible/facts.d/environment.fact
+        mode: 0755
+      tags:
+        - always
+
+    - name: Copy the network fact file
+      copy:
+        src: network.fact
+        dest: /etc/ansible/facts.d/network.fact
+        mode: 0755
+      tags:
+        - always
+
+    - name: Copy the DNS fact file
+      copy:
+        src: dns.fact
+        dest: /etc/ansible/facts.d/dns.fact
+        mode: 0755
+      tags:
+        - always
+
+    - name: Install JQ which is required for the fact scripts
+      yum:
+        name: jq
+        state: latest
+      tags:
+        - always
+
+    - name: Re-run setup to gather custom facts for playbook run
+      setup: filter=ansible_local
+      tags:
+        - always
+
+  roles:
+    - datashades.common
+    - datashades.apache
+    - datashades.services-admin
+    - datashades.postgres
+    - datashades.redis
+    - datashades.solr
+    - datashades.supervisor
+    - datashades.datapusher
+    - datashades.ckan
+    - datashades.etckeeper
+
+  post_tasks:
+    - debug:
+        msg: "Provisioning complete! Please reboot the Services instance before proceeding with the Web playbook."

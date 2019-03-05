@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+# Datashades v2.0 - DNS tag updates
+#
+# Script designed to ensure a new instance has a correct ZoneID tag. Required if the CloudFormation
+# template did not create the Route53 hosted domain.
+#
+# This script will also set a "DNS" tag to allow automation of the instance DNS name resolution.
+
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=$(echo ${placement%?})
+
+myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+zone_id=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=ZoneID" | jq '.Tags[].Value' | tr -d '"')
+
+if [ $zone_id == "NA" ]; then
+
+        # Determine the Hosted Zone ID from the zone name
+        hosted_zone_tld=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=HostedZone" | jq '.Tags[].Value' | tr -d '"')
+        hosted_zone_id=$(aws route53 list-hosted-zones-by-name --dns-name $hosted_zone_tld --max-items 1 | jq '.HostedZones[].Id' | cut -d '/' -f 3 | tr -d '"')
+
+        # Update the ZoneID tag with the correct ZoneID
+        aws ec2 create-tags --resources $myid --tags "Key=ZoneID,Value=$hosted_zone_id" --region $region
+
+        hosted_zone=$hosted_zone_tld
+else
+        hosted_zone_tld=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=HostedZone" | jq '.Tags[].Value' | tr -d '"')
+        hosted_zone=$hosted_zone_tld
+fi
+
+dns_tag=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=DNS"  | jq '.Tags[].Value' | tr -d '"')
+
+if [ $dns_tag == "NA" ]; then
+
+        # Determine the environment and instance type
+        environment=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=StackType" | jq '.Tags[].Value' | tr -d '"' | tr '[:upper:]' '[:lower:]')
+        instance_type=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=InstanceType" | jq '.Tags[].Value' | tr -d '"' | tr '[:upper:]' '[:lower:]')
+
+        # Set the DNS tag appropriately
+        dns_rec="${environment}${instance_type}.${hosted_zone_tld}"
+        aws ec2 create-tags --resources $myid --tags "Key=DNS,Value=$dns_rec" --region $region
+        dns_name=$dns_rec
+else
+        dns_name=$dns_tag
+fi
+
+# Output final JSON
+echo "{"
+echo "    \"hosted_zone\": \"${hosted_zone}\","
+echo "    \"dns_name\": \"${dns_name}\""
+echo "}"

@@ -1,0 +1,16 @@
+---
+# tasks file for datashades.common
+
+- debug:
+    msg: "This server will be provisioned as a {{ ansible_local.environment.environment_type }} environment."
+
+- debug:
+    msg: "This server is running {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+# Include Amazon Linxu 1 tasks
+- include: common-al1.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "1"
+
+# Include AMazon Linux 2 tasks
+- include: common-al2.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

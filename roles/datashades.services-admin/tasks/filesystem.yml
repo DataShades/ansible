@@ -1,0 +1,106 @@
+---
+- name: Format the data volume XFS.
+  filesystem:
+    fstype: xfs
+    dev: /dev/xvdf
+
+- name: Mount the data volume to /data and add to fstab
+  mount:
+    path: /data
+    src: /dev/xvdf
+    fstype: xfs
+    state: mounted
+
+- name: Ensure NFS utils are installed.
+  yum:
+   name: nfs-utils
+
+- name: Restart NFS service
+  service: name=nfs state=restarted
+
+- name: Set up NFS filesystem.
+  block:
+    - debug:
+        msg: "Setting up NFS filesystem."
+    - file:
+        path: /data/nfs
+        state: directory
+        mode: 0755
+    - set_fact: fs_path="/data/nfs"
+  when: ansible_local.environment.efs_id == "NA"
+  tags:
+    - services-admin_nfs-setup
+
+- name: "Set up EFS filesystem."
+  block:
+    - debug:
+        msg: "Setting up EFS filesystem."
+    - file:
+        path: /data/efs
+        state: directory
+        mode: 0755
+    - set_fact: fs_path="/data/efs"
+    - mount:
+        name: /data/efs
+        src: "{{ ansible_local.environment.efs_id }}.efs.{{ ansible_local.environment.aws_region }}.amazonaws.com:/"
+        fstype: nfs4
+        opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+        state: mounted
+  when: ansible_local.environment.efs_id != "NA"
+  tags:
+    - services-admin_efs-setup
+
+- name: "Create directory structure."
+  block:
+    - debug: 
+        msg: "Creating directory structure within {{ fs_path }}."
+    - file:
+        path: "{{ fs_path }}/logs"
+        state: directory
+        mode: 0755
+    - file:
+        path: "{{ fs_path }}/logs/nginx/{{ ansible_local.environment.environment_type }}_ckan"
+        state: directory
+        mode: 0755
+    - file:
+        path: "{{ fs_path }}/logs/apache/{{ ansible_local.environment.environment_type }}_ckan"
+        state: directory
+        mode: 0755
+    - file:
+        path: "{{ fs_path }}/shared_content"
+        state: directory
+        mode: 0755
+
+- name: Set up NFS exports
+  block:
+    - template:
+        src: exports.j2
+        dest: /etc/exports
+    - command: exportfs -ra
+  when: ansible_local.environment.efs_id == "NA"
+  tags:
+    - services-admin_exports
+
+- name: Enable NFS on boot and start service.
+  block:
+    - service: name=nfs state=restarted
+    - service: name=nfs enabled=yes
+  when: ansible_local.environment.efs_id == "NA"
+
+- name: Symlink logging directory to EFS/NFS path for services instance.
+  file:
+    src: "{{ fs_path }}/logs/apache/{{ ansible_local.environment.environment_type }}_ckan"
+    dest: /var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan
+    state: link
+    owner: apache
+    group: apache
+  when: host_type == "services"
+
+- name: Symlink /var/shared_content to the shared filesystem for services instance.
+  file:
+    src: "{{ fs_path }}/shared_content"
+    dest: /var/shared_content
+    state: link
+    owner: apache
+    group: apache
+  when: host_type == "services"

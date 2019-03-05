@@ -1,0 +1,85 @@
+---
+# tasks file for datashades.php
+
+- name: Enable PHP 7.1 in Amazon Linux Extras
+  shell: amazon-linux-extras install php7.1 -y
+
+- name: Install PHP and php-fpm packages.
+  yum:
+    name:
+      - php
+      - php-fpm
+      - php-gd
+      - php-soap
+      - php-mysqlnd
+      - php-opcache
+      - php-mbstring
+      - php-pdo
+      - php-pecl-igbinary
+      - php-pecl-memcached
+      - php-mcrypt
+      - php-xml
+    state: latest
+    disablerepo: epel
+
+- name: Enable PHP-FPM to start on boot
+  systemd:
+    name: php-fpm
+    enabled: yes
+
+- name: Set PHP-FPM to listen on a socket
+  ini_file:
+    path: /etc/php-fpm.d/www.conf
+    section: www
+    option: listen
+    value: /var/run/php-fpm/phpfpm.sock
+
+- name: Set the PHP-FPM socket owner to Nginx
+  block:
+    - ini_file:
+        path: /etc/php-fpm.d/www.conf
+        section: www
+        option: listen.owner
+        value: 'nginx'
+      notify: restart php-fpm 
+    - ini_file:
+        path: /etc/php-fpm.d/www.conf
+        section: www
+        option: listen.group
+        value: 'nginx'
+      notify: restart php-fpm
+    - ini_file:
+        path: /etc/php-fpm.d/www.conf
+        section: www
+        option: listen.mode
+        value: '0660'
+      notify: restart php-fpm
+
+- name: Enable catch_worker_output in PHP-FPM configuration.
+  ini_file:
+    path: /etc/php-fpm.d/www.conf
+    section: www
+    option: catch_workers_output
+    value: 'yes'
+  notify: restart php-fpm
+
+- name: Enable error logging
+  ini_file:
+    path: /etc/php-fpm.d/www.conf
+    section: www
+    option: php_admin_value[error_log]
+    value: '/var/log/php-fpm/7.0/www-error.log'
+  notify: restart php-fpm
+
+- name: Set OpCache timestamp check
+  ini_file:
+    path: /etc/php.d/10-opcache.ini
+    section: null
+    option: opcache.validate_timestamps
+    value: "0"
+  notify: restart php-fpm
+
+- name: Restart PHP-FPM
+  systemd:
+    name: php-fpm
+    state: restarted

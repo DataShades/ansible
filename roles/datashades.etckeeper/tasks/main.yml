@@ -1,0 +1,10 @@
+---
+# tasks file for datashades.etckeeper
+
+- include: etckeeper-al1.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "1"
+
+# Etckeeper is currently not supported on Amazon Linux 2
+
+#- include: etckeeper-al2.yml
+#  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

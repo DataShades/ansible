@@ -1,0 +1,64 @@
+---
+- name: Install MySQL
+  yum:
+    name:
+      - mariadb
+    state: latest
+
+- name: Create directory for Drupal installation
+  file:
+    path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+    state: directory
+  tags: drupal_web
+
+- name: Clone Drupal repo into site directory
+  git:
+    repo: https://github.com/drupal/drupal.git
+    dest: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/
+    version: "7.x"
+    accept_hostkey: yes
+  tags: drupal_git-clone
+
+- name: Create directories in shared content for Drupal files and private content, then symlink
+  block:
+    - file:
+        path: /var/shared_content/drupal/files
+        state: directory
+        owner: apache
+        group: apache
+        mode: 0755
+    - file:
+        path: /var/shared_content/drupal/private
+        state: directory
+        owner: apache
+        group: apache
+        mode: 0755
+    - file:
+        src: /var/shared_content/drupal/files
+        dest: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/sites/default/files
+        state: link
+  tags: drupal_web
+
+- name: Copy Drupal settings template
+  template:
+    src: settings.php.j2
+    dest: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/sites/default/settings.php
+    owner: root
+    group: apache
+    mode: 0644
+  tags: drupal_web
+
+- name: Install Drush
+  get_url:
+    url: https://github.com/drush-ops/drush/releases/download/8.1.17/drush.phar
+    dest: /usr/local/bin/drush
+    mode: 0755
+  tags: drupal_drush
+
+- name: Run Drupal intaller via Drush
+  shell: echo "y" | /usr/local/bin/drush site-install --account-name=admin --account-pass="{{ ansible_local.environment.db_password }}" >> /root/drupal_install.log
+  args:
+    creates: /root/drupal_install.log
+    chdir: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+  tags: drupal_install
+

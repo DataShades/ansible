@@ -1,0 +1,22 @@
+---
+# tasks file for datashades.etckeeper
+
+- name: Install etckeeper
+  yum:
+    name: etckeeper
+    state: latest
+  tags: etckeeper
+
+- name: Initialise a repository
+  shell: etckeeper init
+  args:
+    chdir: /etc
+    creates: /etc/.git/
+  tags: etckeeper
+
+- name: Perform initial commit
+  shell: etckeeper commit 'initial commit' >> /root/etckeeper-commit.log
+  args:
+    chdir: /etc
+    creates: /root/etckeeper-commit.log
+  tags: etckeeper

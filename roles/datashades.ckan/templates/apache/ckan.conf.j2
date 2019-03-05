@@ -1,0 +1,25 @@
+<VirtualHost 127.0.0.1:8000>
+    ServerName {{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}
+
+{% if drupal == "no" %}
+    WSGIScriptAlias / /etc/ckan/default/apache.wsgi
+{% else %}
+    WSGIScriptAlias /data /etc/ckan/default/apache.wsgi
+{% endif %}
+
+    # Pass authorization info on (needed for rest api).
+    WSGIPassAuthorization On
+
+    # Deploy as a daemon (avoids conflicts between CKAN instances).
+    WSGIDaemonProcess ckan_default display-name=ckan_default processes=2 threads=15
+
+    WSGIProcessGroup ckan_default
+
+    ErrorLog /var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan/ckan_default.error.log
+    CustomLog /var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan/ckan_default.custom.log combined
+
+    <Directory />
+        Require all granted
+    </Directory>
+
+</VirtualHost>

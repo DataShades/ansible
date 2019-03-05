@@ -1,0 +1,120 @@
+---
+# Installs CKAN onto a web instance and configures it fully.
+
+- name: Install Python Postgres
+  yum:
+    name: 
+      - python-psycopg2
+      - postgresql
+      - postgresql-devel
+    state: latest
+
+- name: Install Nginx site configuration.
+  template:
+    src: nginx/site.conf.j2
+    dest: /etc/nginx/conf.d/{{ ansible_local.environment.environment_type }}_ckan.conf
+    owner: nginx
+    group: nginx
+    mode: 0755
+  notify: restart nginx
+  tags: nginx-web_config
+
+- name: Create CKAN directory
+  file:
+    path: /usr/lib/ckan
+    state: directory
+    owner: ckan
+    group: ckan
+
+- name: Create CKAN configuration directory
+  file:
+    path: /etc/ckan/default
+    state: directory
+    owner: ckan
+    group: ckan
+
+- name: Create CKAN storage directory
+  file:
+    path: /var/shared_content/{{ ansible_local.environment.environment_type }}_ckan
+    state: directory
+    owner: apache
+    group: apache
+    mode: 0777
+
+- name: Install the required setuptools version
+  pip:
+    name: setuptools
+    version: "20.4"
+    virtualenv: /usr/lib/ckan/default
+
+- name: Install CKAN into virtualenv
+  shell: /usr/lib/ckan/default/bin/pip install -e 'git+https://github.com/ckan/ckan.git@ckan-2.7.3#egg=ckan'
+  args:
+    creates: /usr/lib/ckan/default/src/ckan/requirements.txt
+  tags: ckan_install-release
+
+- name: Install CKAN requirements
+  pip:
+    requirements: /usr/lib/ckan/default/src/ckan/requirements.txt
+    virtualenv: /usr/lib/ckan/default
+  tags: ckan_requirements
+
+- name: Set ownership of CKAN files to CKAN's user
+  file:
+    path: /usr/lib/ckan/default
+    owner: ckan
+    group: ckan
+    recurse: yes
+
+# Do configuration tasks
+- include: ckan-configuration.yml
+
+- name: Copy apache.wsgi file to CKAN configuration directory
+  copy:
+    src: apache.wsgi
+    dest: /etc/ckan/default/apache.wsgi
+    owner: ckan
+    group: ckan
+    mode: 0755
+
+- name: Create Apache CKAN configuration
+  template:
+    src: apache/ckan.conf.j2
+    dest: /etc/httpd/conf.d/ckan.conf
+    owner: apache
+    group: apache
+  notify: restart httpd
+
+- name: Copy CKAN DB setup script and execute
+  block:
+    - template:
+        src: install_ckan_dbuser.py.j2
+        dest: /root/install_ckan_dbuser.py
+        mode: 0755
+    - shell: /root/install_ckan_dbuser.py >> /root/install_ckan_dbuser.log
+      args:
+        creates: /root/install_ckan_dbuser.log
+
+- name: Copy Datastore DB setup script and execute
+  block:
+    - template:
+        src: install_datastore_dbuser.py.j2
+        dest: /root/install_datastore_dbuser.py
+        mode: 0755
+    - shell: /root/install_datastore_dbuser.py >> /root/install_datastore_dbuser.log
+      args:
+        creates: /root/install_datastore_dbuser.log
+
+- name: Initialise the CKAN database
+  shell: /usr/lib/ckan/default/bin/paster --plugin=ckan db init -c /etc/ckan/default/production.ini >> /root/ckan_db_init.log
+  args:
+    creates: /root/ckan_db_init.log
+
+- name: Create default CKAN user and provide sysadmin permissions
+  block:
+    - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan user add sysadmin password="{{ ansible_local.environment.db_password }}" email="support@linkdigital.com.au" -c /etc/ckan/default/production.ini >> /root/sysadmin_user.log
+      args:
+        creates: /root/sysadmin_user.log
+    - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan sysadmin add sysadmin -c /etc/ckan/default/production.ini >> /root/sysadmin_permissions.log
+      args:
+        creates: /root/sysadmin_permissions.log

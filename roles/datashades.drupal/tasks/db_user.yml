@@ -1,0 +1,20 @@
+---
+
+- name: Create MySQL database for Drupal
+  mysql_db:
+    name: "{{ ansible_local.environment.environment_type }}_drupal"
+    state: present
+    login_user: root
+    login_password: "{{ ansible_local.environment.db_password }}"
+  tags: drupal_db
+
+- name: Create a MySQL user for Drupal
+  mysql_user:
+    name: "{{ ansible_local.environment.environment_type }}_drupal"
+    password: "{{ ansible_local.environment.db_password }}"
+    state: present
+    host: "%"
+    priv: "{{ ansible_local.environment.environment_type }}_drupal.*:ALL"
+    login_user: root
+    login_password: "{{ ansible_local.environment.db_password }}"
+  tags: drupal_db

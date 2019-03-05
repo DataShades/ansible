@@ -1,0 +1,78 @@
+---
+# tasks file for datashades.solr
+
+# Separate steps for download and extracting are required as the install process requires the original zip file.
+# Using unarchive to retrieve a remote file doesn't store the archive locally.
+- name: Download the Solr archive
+  get_url:
+    url: https://s3-ap-southeast-2.amazonaws.com/datashades-files/solr-5.5.5.zip
+    dest: /tmp
+
+- name: Extract the Solr archive
+  unarchive:
+    src: /tmp/solr-5.5.5.zip
+    dest: /tmp
+    remote_src: yes
+
+- name: Execute the Solr install script
+  shell: ./install_solr_service.sh /tmp/solr-5.5.5.zip
+  args:
+    chdir: /tmp/solr-5.5.5/bin/
+    creates: /var/solr
+
+- name: Check to ensure the Solr directory exists.
+  block:
+    - stat:
+        path: /var/solr
+      register: solr_dir
+    - debug:
+        msg: "The path /var/solr is a directory so we need to move it."
+      when: solr_dir.stat.isdir is defined and solr_dir.stat.isdir
+    - debug:
+        msg: "The path /var/solr is a symlink already."
+      when: solr_dir.stat.islnk is defined and solr_dir.stat.islnk
+
+- name: Move the Solr directory to /data/solr
+  block:
+    - command: mv /var/solr /data/solr
+    - file:
+        src: /data/solr
+        dest: /var/solr
+        state: link
+  when: solr_dir.stat.isdir is defined and solr_dir.stat.isdir
+
+- name: Set core name fact.
+  set_fact:
+    solr_core_name: "{{ ansible_local.environment.environment_type }}_ckan"
+
+- name: Create Solr core directory
+  file:
+    path: /data/solr/data/{{ solr_core_name }}/data
+    recurse: yes
+    owner: solr
+    group: solr
+
+- name: Create Solr core.properties file
+  lineinfile:
+    path: /data/solr/data/{{ solr_core_name }}/core.properties
+    line: 'name={{ solr_core_name }}'
+    create: yes
+    owner: solr
+    group: solr
+
+- name: Create the Solr conf directory using template archive
+  unarchive:
+    src: https://s3-ap-southeast-2.amazonaws.com/datashades-files/ckan-2.7_solr_conf.zip
+    dest: /data/solr/data/{{ solr_core_name }}/
+    remote_src: yes
+    owner: solr
+    group: solr
+    creates: /data/solr/data/{{ solr_core_name}}/conf
+
+- name: Enable Solr on boot
+  service:
+    name: solr
+    enabled: yes
+
+- name: Restart Solr
+  service: name=solr state=restarted

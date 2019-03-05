@@ -1,0 +1,34 @@
+---
+# tasks file for datashades.mysql
+
+- name: Install MySQL
+  yum:
+    name: 
+      - mysql57
+      - mysql57-server
+      - MySQL-python27
+    state: latest
+
+- name: Enable MySQL on boot
+  service:
+    name: mysqld
+    enabled: yes
+
+- name: Start MySQL
+  service:
+    name: mysqld
+    state: restarted
+
+- name: Set MySQL root password
+  mysql_user:
+    name: root
+    password: "{{ansible_local.environment.db_password }}"
+    host: "localhost"
+    login_user: root
+    login_password: ""
+  tags: mysql_root-user
+
+- name: Create ~/.my.cnf containing root credentials
+  template:
+    src: my.cnf.j2
+    dest: /root/.my.cnf

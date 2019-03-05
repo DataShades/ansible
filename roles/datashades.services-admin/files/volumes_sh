@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# Datashades v2.0 - Volume tagging
+#
+# This script is designed to ensure that both volumes attached o the services instance
+# are correctly named as this cannot be done via CloudFormation.
+
+placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
+region=$(echo ${placement%?})
+myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
+
+data_volume_id=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="${myid}" Name=attachment.delete-on-termination,Values=false --region $region | jq '.Volumes[].VolumeId' | tr -d '"')
+root_volume_id=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="${myid}" Name=attachment.delete-on-termination,Values=true --region $region | jq '.Volumes[].VolumeId' | tr -d '"')
+
+instance_name=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=Name" | jq '.Tags[].Value' | tr -d '"')
+
+aws ec2 create-tags --resources $data_volume_id --tags Key=Name,Value="${instance_name}_data" --region $region
+aws ec2 create-tags --resources $root_volume_id --tags Key=Name,Value="${instance_name}_root" --region $region

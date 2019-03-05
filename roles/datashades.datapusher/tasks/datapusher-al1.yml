@@ -1,0 +1,94 @@
+---
+# tasks file for datashades.datapusher
+
+- name: Create virtualenv for Datapusher and install Datapusher
+  command: virtualenv /usr/lib/ckan/datapusher
+  args:
+    creates: /usr/lib/ckan/datapusher
+
+# To allow the virtual environment to work correctly under Amazon Linux we need to symlink lib to lib64
+# after moving it's contents
+
+# To ensure idempotency, first we:
+- name: Determine if lib directory is a symlink
+  block:
+    - stat:
+        path: /usr/lib/ckan/datapusher/lib
+      register: datapusher_lib_dir
+    - debug:
+        msg: "The path /usr/lib/ckan/datapusher/lib is a directory so we have work to do."
+      when: datapusher_lib_dir.stat.isdir is defined and datapusher_lib_dir.stat.isdir
+    - debug:
+        msg: "The path /usr/lib/ckan/datapusher/lib is a symlink already, no work required."
+      when: datapusher_lib_dir.stat.islnk is defined and datapusher_lib_dir.stat.islnk
+
+# Then we:
+- name: Move lib content to lib64 and symlink
+  block:
+    - shell: mv /usr/lib/ckan/datapusher/lib/python2.7/site-packages/* /usr/lib/ckan/datapusher/lib64/python2.7/site-packages/
+      args:
+        creates: /usr/lib/ckan/datapusher/lib64/python2.7/site-packages/pip
+    - file:
+        path: /usr/lib/ckan/datapusher/lib
+        state: absent
+    - file:
+        src: /usr/lib/ckan/datapusher/lib64/
+        dest: /usr/lib/ckan/datapusher/lib
+        state: link
+  when: datapusher_lib_dir.stat.isdir is defined and datapusher_lib_dir.stat.isdir
+
+- name: Create src directory for Datapusher
+  file:
+    path: /usr/lib/ckan/datapusher/src
+    state: directory
+
+- name: Clone Datapusher source from Git
+  git:
+    repo: https://github.com/ckan/datapusher.git
+    clone: yes
+    dest: /usr/lib/ckan/datapusher/src/datapusher
+    version: 0.0.14
+
+- name: Install Datapusher requirements
+  pip:
+    requirements: /usr/lib/ckan/datapusher/src/datapusher/requirements.txt
+    virtualenv: /usr/lib/ckan/datapusher
+
+- name: Execute python setup
+  command: /usr/lib/ckan/datapusher/bin/python setup.py develop 
+  args:
+    creates: /usr/lib/ckan/datapusher/src/datapusher/datapusher.egg-info
+    chdir: /usr/lib/ckan/datapusher/src/datapusher
+
+- name: Set ownership of Datapusher's files to CKAN user
+  file:
+    path: /usr/lib/ckan/datapusher
+    owner: ckan
+    group: ckan
+    recurse: yes
+
+- name: Copy Apache configuration file.
+  template:
+    src: datapusher_2.4.conf
+    dest: /etc/httpd/conf.d/datapusher.conf
+    owner: apache
+    group: apache
+  notify: restart httpd
+
+- name: Create /etc/ckan/ directory
+  file:
+    path: /etc/ckan
+    state: directory
+    mode: 0755
+
+- name: Copy the Datapusher WSGI file.
+  copy:
+    src: datapusher.wsgi
+    dest: /etc/ckan/datapusher.wsgi
+  notify: restart httpd
+
+- name: Copy the Datapusher settings file.
+  copy:
+    src: datapusher_settings.py
+    dest: /etc/ckan/datapusher_settings.py
+  notify: restart httpd

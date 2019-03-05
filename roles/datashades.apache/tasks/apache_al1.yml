@@ -1,0 +1,54 @@
+---
+# tasks file for datashades.apache
+
+- name: Install Apache 2.4
+  yum:
+    name:
+      - httpd24
+      - mod24_wsgi-python27
+
+- name: Enable Apache on boot
+  service:
+    name: httpd
+    enabled: yes
+
+- name: Create logging directory for web instance.
+  file:
+    path: /var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan
+    state: directory
+    owner: apache
+    group: apache
+  when: host_type == "web"
+
+- name: Set Apache to listen on port 8000 for CKAN if web instance.
+  lineinfile:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '^Listen 80$'
+    line: "Listen 8000"
+    backrefs: yes
+  notify: restart httpd
+  when: host_type == "web"
+  tags: apache_listen
+
+- name: Set Apache to listen on port 8800 for Datapusher if services instance.
+  lineinfile:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '^Listen 80$'
+    line: "Listen 8800"
+    backrefs: yes
+  notify: restart httpd
+  when: host_type == "services"
+  tags: apache_listen
+
+- name: Fix access to / in Apache config
+  replace:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '[^#-]Require all denied'
+    replace: "#Require all denied"
+  notify: restart httpd
+  tags: apache_require-all
+
+- name: Start Apache
+  service:
+    name: httpd
+    state: restarted
