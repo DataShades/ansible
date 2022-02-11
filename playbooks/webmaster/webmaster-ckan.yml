@@ -3,9 +3,16 @@
   vars:
     host_type: 'web'
     drupal: 'no'
+    drupal_version: '0'
   remote_user: ec2-user
   become_user: root
   become: yes
+  become_flags: -i
+  vars_prompt:
+    - name: "email"
+      prompt: "Enter your email address for use when creating system accounts:"
+      default: ""
+      private: no
   pre_tasks:
     - name: Create custom facts directory
       file:
@@ -52,9 +59,9 @@
 
   roles:
     - datashades.common
-    - datashades.apache
+    - datashades.supervisor
     - datashades.webmaster-admin
     - datashades.nginx
-    - datashades.php
+    - datashades.pyenv
     - datashades.ckan
-    - datashades.etckeeper
+    - datashades.xloader

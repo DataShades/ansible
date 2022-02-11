@@ -3,9 +3,12 @@
   vars:
     host_type: 'services'
     drupal: 'yes'
+    drupal_version: '9.3.x'     # Drupal version to be installed (i.e. branches of https://github.com/drupal/recommended-project)
+    solr: '8'
   remote_user: ec2-user
   become_user: root
   become: yes
+  become_flags: -i
   pre_tasks:
     - name: Create custom facts directory
       file:
@@ -52,17 +55,16 @@
 
   roles:
     - datashades.common
-    - datashades.apache
     - datashades.services-admin
     - datashades.postgres
     - datashades.redis
     - datashades.solr
     - datashades.supervisor
-    - datashades.datapusher
+    - datashades.pyenv
     - datashades.ckan
+    - datashades.xloader
     - datashades.mysql
-    - datashades.drupal
-    - datashades.etckeeper
+    - datashades.drupal9
 
   post_tasks:
     - debug:

@@ -1,4 +1,0 @@
----
-# handlers file for datashades.apache
-- name: restart httpd
-  service: name=httpd state=restarted

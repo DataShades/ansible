@@ -3,9 +3,16 @@
   vars:
     host_type: 'web'
     drupal: 'yes'
+    drupal_version: '9.3.x' # Drupal version to be installed (i.e. branches of https://github.com/drupal/recommended-project)
   remote_user: ec2-user
   become_user: root
   become: yes
+  become_flags: -i
+  vars_prompt:
+    - name: "email"
+      prompt: "Enter your email address for use when creating system accounts:"
+      default: ""
+      private: no
   pre_tasks:
     - name: Create custom facts directory
       file:
@@ -52,10 +59,11 @@
 
   roles:
     - datashades.common
-    - datashades.apache
+    - datashades.supervisor
     - datashades.webmaster-admin
     - datashades.nginx
     - datashades.php
+    - datashades.pyenv
     - datashades.ckan
-    - datashades.drupal
-    - datashades.etckeeper
+    - datashades.xloader
+    - datashades.drupal9

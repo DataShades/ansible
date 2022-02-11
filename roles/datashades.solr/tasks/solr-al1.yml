@@ -69,6 +69,12 @@
     group: solr
     creates: /data/solr/data/{{ solr_core_name}}/conf
 
+- name: Copy JTS module to enable spatial search functionality
+  copy:
+    src: jts-core-1.14.0.jar
+    dest: /opt/solr/server/solr-webapp/webapp/WEB-INF/lib/jts-core-1.14.0.jar
+    mode: 0644
+
 - name: Enable Solr on boot
   service:
     name: solr

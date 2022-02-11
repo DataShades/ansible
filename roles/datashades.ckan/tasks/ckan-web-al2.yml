@@ -3,7 +3,7 @@
 
 - name: Install Python Postgres
   yum:
-    name: 
+    name:
       - python-psycopg2
       - postgresql
       - postgresql-devel
@@ -37,18 +37,34 @@
   file:
     path: /var/shared_content/{{ ansible_local.environment.environment_type }}_ckan
     state: directory
-    owner: apache
-    group: apache
+    owner: ckan
+    group: ckan
+    mode: 0777
+
+- name: Create CKAN Beaker session directory
+  file:
+    path: /var/shared_content/{{ ansible_local.environment.environment_type }}_ckan/sessions
+    state: directory
+    owner: ckan
+    group: ckan
     mode: 0777
 
 - name: Install the required setuptools version
   pip:
     name: setuptools
-    version: "20.4"
+    version: "44.1.0"
     virtualenv: /usr/lib/ckan/default
+    virtualenv_python: /opt/pyenv/shims/python
+
+- name: Upgrade Pip
+  pip:
+    name: pip
+    state: latest
+    virtualenv: /usr/lib/ckan/default
+  tags: upgrade_pip
 
 - name: Install CKAN into virtualenv
-  shell: /usr/lib/ckan/default/bin/pip install -e 'git+https://github.com/ckan/ckan.git@ckan-2.7.3#egg=ckan'
+  shell: /usr/lib/ckan/default/bin/pip install -e 'git+https://github.com/ckan/ckan.git@2.9#egg=ckan'
   args:
     creates: /usr/lib/ckan/default/src/ckan/requirements.txt
   tags: ckan_install-release
@@ -59,6 +75,12 @@
     virtualenv: /usr/lib/ckan/default
   tags: ckan_requirements
 
+#- name: Install CKAN DEV requirements
+#  pip:
+#    requirements: /usr/lib/ckan/default/src/ckan/dev-requirements.txt
+#    virtualenv: /usr/lib/ckan/default
+#  tags: ckan_requirements
+
 - name: Set ownership of CKAN files to CKAN's user
   file:
     path: /usr/lib/ckan/default
@@ -68,22 +90,41 @@
 
 # Do configuration tasks
 - include: ckan-configuration.yml
+  when: host_type == "web"
+- include: ckan-standalone-configuration.yml
+  when: host_type == "standalone"
 
-- name: Copy apache.wsgi file to CKAN configuration directory
+- name: Install uWSGI into the CKAN virtualenv
+  pip:
+    name: uwsgi
+    virtualenv: /usr/lib/ckan/default
+
+- name: Copy WSGI file to CKAN configuration directory
   copy:
-    src: apache.wsgi
-    dest: /etc/ckan/default/apache.wsgi
+    src: wsgi.py
+    dest: /etc/ckan/default/wsgi.py
     owner: ckan
     group: ckan
     mode: 0755
 
-- name: Create Apache CKAN configuration
+- name: Copy uWSGI ini file to CKAN configuration directory
   template:
-    src: apache/ckan.conf.j2
-    dest: /etc/httpd/conf.d/ckan.conf
-    owner: apache
-    group: apache
-  notify: restart httpd
+    src: uwsgi/ckan-uwsgi.j2
+    dest: /etc/ckan/default/ckan-uwsgi.ini
+    owner: ckan
+    group: ckan
+    mode: 0755
+
+- name: Copy CKAN supervisor configuration
+  template:
+    src: ckan-uwsgi-supervisor.j2
+    dest: /etc/supervisord.d/ckan-uwsgi.conf
+  notify: restart supervisord
+
+- name: Create logging directory for CKAN
+  file:
+    path: /var/log/{{ ansible_local.environment.environment_type }}_ckan/
+    state: directory
 
 - name: Copy CKAN DB setup script and execute
   block:
@@ -106,15 +147,44 @@
         creates: /root/install_datastore_dbuser.log
 
 - name: Initialise the CKAN database
-  shell: /usr/lib/ckan/default/bin/paster --plugin=ckan db init -c /etc/ckan/default/production.ini >> /root/ckan_db_init.log
+  shell: /usr/lib/ckan/default/bin/ckan -c /etc/ckan/default/production.ini db init >> /root/ckan_db_init.log
   args:
     creates: /root/ckan_db_init.log
 
 - name: Create default CKAN user and provide sysadmin permissions
   block:
-    - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan user add sysadmin password="{{ ansible_local.environment.db_password }}" email="support@linkdigital.com.au" -c /etc/ckan/default/production.ini >> /root/sysadmin_user.log
+    - shell: /usr/lib/ckan/default/bin/ckan -c /etc/ckan/default/production.ini user add sysadmin password="{{ ansible_local.environment.db_password }}" email="{{ email }}" >> /root/sysadmin_user.log
       args:
         creates: /root/sysadmin_user.log
-    - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan sysadmin add sysadmin -c /etc/ckan/default/production.ini >> /root/sysadmin_permissions.log
+    - shell: /usr/lib/ckan/default/bin/ckan -c /etc/ckan/default/production.ini sysadmin add sysadmin >> /root/sysadin_permissions.log
       args:
         creates: /root/sysadmin_permissions.log
+
+- name: Set ownership of CKAN storage to CKAN's user
+  file:
+    path: /var/shared_content/{{ ansible_local.environment.environment_type }}_ckan/
+    owner: ckan
+    group: ckan
+    recurse: yes
+
+- name: Create logrotate configuration for CKAN under Supervisor.
+  template:
+    src: logrotate-ckan.j2
+    dest: /etc/logrotate.d/ckan
+    owner: root
+    group: root
+    mode: 0644
+
+# Actions solely for standalone instance, included here to avoid having to call the worker role for only two tasks
+- name: Install CKAN worker daemon
+  template:
+    src: ckan-worker.conf.j2
+    dest: /etc/supervisord.d/ckan-worker.conf
+    owner: ckan
+    group: ckan
+  when: host_type == "standalone"
+
+- name: Restart Supervisor
+  systemd:
+    name: supervisord
+    state: restarted

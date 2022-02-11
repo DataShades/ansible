@@ -1,0 +1,8 @@
+---
+# tasks file for datashades.drupal9
+
+- include: db_user.yml
+  when: host_type == "services"
+
+- include: web-main.yml
+  when: host_type == "web"

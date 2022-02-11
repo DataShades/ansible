@@ -1,0 +1,12 @@
+/var/log/*_ckan/*.log {
+    daily
+    rotate 35
+    compress
+    missingok
+    notifempty
+    sharedscripts
+    delaycompress
+    dateext
+    copytruncate
+    endscript
+}

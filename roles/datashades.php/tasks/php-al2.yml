@@ -1,8 +1,10 @@
 ---
 # tasks file for datashades.php
 
-- name: Enable PHP 7.1 in Amazon Linux Extras
-  shell: amazon-linux-extras install php7.1 -y
+- name: Enable PHP 8.0 in Amazon Linux Extras
+  shell: amazon-linux-extras install php8.0 -y
+  environment:
+    PYTHON: "python2"
 
 - name: Install PHP and php-fpm packages.
   yum:
@@ -15,10 +17,8 @@
       - php-opcache
       - php-mbstring
       - php-pdo
-      - php-pecl-igbinary
-      - php-pecl-memcached
-      - php-mcrypt
       - php-xml
+      - php-sodium
     state: latest
     disablerepo: epel
 

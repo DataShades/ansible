@@ -4,6 +4,7 @@
   yum:
     name:
       - nginx
+      - socat
 
 - name: Enable Nginx on boot
   systemd:
@@ -42,7 +43,7 @@
     - nginx_default-server
 
 - include: letsencrypt.yml
-  when: ansible_local.environment.environment_type != "prod"
+  when: ansible_local.environment.environment_type != "prod" or host_type == "standalone"
 
 - name: Start Nginx
   systemd:

@@ -1,0 +1,58 @@
+---
+# tasks file for datashades.pyenv
+
+- name: Install PyEnv to /opt
+  git:
+    repo: https://github.com/pyenv/pyenv.git
+    dest: /opt/pyenv
+
+- name: Export paths and variables to bash_profile
+  block:
+    - name: Export PyEnv path
+      shell: echo 'export PYENV_ROOT="/opt/pyenv"' >> ~/.bash_profile && touch /root/pyenv_path
+      args:
+        creates: /root/pyenv_path
+    - name: Export PyEnv root
+      shell: echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile && touch /root/pyenv_root
+      args:
+        creates: /root/pyenv_root
+    - name: Export PyEnv shims
+      shell: echo 'eval "$(pyenv init --path)"' >> ~/.bash_profile && touch /root/pyenv_shims_1
+      args:
+        creates: /root/pyenv_shims_1
+    - name: Export PyEnv shims
+      shell: echo -e 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' >> ~/.bash_profile && touch /root/pyenv_shims_2
+      args:
+        creates: /root/pyenv_shims_2
+    - name: Set 777 permissions on PyEnv directory
+      file:
+        path: /opt/pyenv
+        mode: '777'
+
+- name: Install packages necessary to build new Python version 
+  yum:
+    name:
+      - openssl-devel
+      - readline-devel
+      - zlib-devel
+      - sqlite-devel
+      - libffi-devel 
+    state: latest
+
+- name: Reset Bash
+  shell: . /root/.bashrc
+
+- name: Install Python 3.8.x
+  shell: pyenv install 3.8.9
+  args:
+    creates: /opt/pyenv/versions/3.8.9
+- name: Switch to Python 3.8.x
+  shell: pyenv global 3.8.9
+
+- name: Run Python -V
+  shell: python -V
+  register: py_version
+
+- name: Debug Python version
+  debug:
+    msg: "Python version: {{ py_version }}"

@@ -148,7 +148,7 @@
 
 - name: Create default CKAN user and provide sysadmin permissions
   block:
-    - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan user add sysadmin password="{{ ansible_local.environment.db_password }}" email="support@linkdigital.com.au" -c /etc/ckan/default/production.ini >> /root/sysadmin_user.log
+    - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan user add sysadmin password="{{ ansible_local.environment.db_password }}" email="{{ email }}" -c /etc/ckan/default/production.ini >> /root/sysadmin_user.log
       args:
         creates: /root/sysadmin_user.log
     - shell: /usr/lib/ckan/default/bin/paster --plugin=ckan sysadmin add sysadmin -c /etc/ckan/default/production.ini >> /root/sysadmin_permissions.log

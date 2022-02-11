@@ -1,13 +1,42 @@
 ---
 # tasks file for datashades.mysql
 
-- name: Install MySQL
+- name: Copy MariaDB Yum repository configuration
+  copy:
+    src: MariaDB-10.6.repo
+    dest: /etc/yum.repos.d/
+
+- name: Install MariaDB and Python package for Ansible
   yum:
-    name: 
-      - mariadb-server
-      - mariadb
-      - MySQL-python
+    name:
+      - MariaDB-server
+      - MariaDB
+      - MariaDB-client
+      - python2-PyMySQL
+      - MariaDB-shared
+      - MariaDB-devel
     state: latest
+
+- name: Check to ensure the MySQL data directory exists.
+  block:
+    - stat:
+        path: /var/lib/mysql
+      register: mysql_dir
+    - debug:
+        msg: "The path {{ mysql_dir }} is a directory so we need to move it."
+      when: mysql_dir.stat.isdir is defined and mysql_dir.stat.isdir
+    - debug:
+        msg: "The path {{ mysql_dir }} is a symlink already."
+      when: mysql_dir.stat.islnk is defined and mysql_dir.stat.islnk
+
+- name: Move the MySQL data directory to /data/mysql and create a symlink
+  block:
+    - command: mv /var/lib/mysql /data/mysql
+    - file:
+        src: /data/mysql
+        dest: /var/lib/mysql
+        state: link
+  when: mysql_dir.stat.isdir is defined and mysql_dir.stat.isdir
 
 - name: Enable MySQL on boot
   systemd:
@@ -19,16 +48,50 @@
     name: mariadb
     state: restarted
 
+# Replicating steps run by `mysql_secure_installation`
+
 - name: Set MySQL root password
   mysql_user:
     name: root
-    password: "{{ansible_local.environment.db_password }}"
-    host: "localhost"
-    login_user: root
-    login_password: ""
+    password: "{{ ansible_local.environment.db_password }}"
+    login_unix_socket: /data/mysql/mysql.sock
   tags: mysql_root-user
 
 - name: Create ~/.my.cnf containing root credentials
   template:
     src: my.cnf.j2
     dest: /root/.my.cnf
+    mode: 0600
+
+- name: Ensure test database is absent
+  mysql_db:
+    name: test
+    state: absent
+    login_unix_socket: /data/mysql/mysql.sock
+    login_user: root
+    login_password: "{{ ansible_local.environment.db_password }}"
+
+- name: anonymous users are absent
+  mysql_user:
+    name: ''
+    state: absent
+    host_all: true
+    login_unix_socket: /data/mysql/mysql.sock
+    login_user: root
+    login_password: "{{ ansible_local.environment.db_password }}"
+
+- name: remove remote root
+  community.mysql.mysql_query:
+    query:
+      - DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')
+    login_unix_socket: /data/mysql/mysql.sock
+    login_user: root
+    login_password: "{{ ansible_local.environment.db_password }}"
+
+- name: Increase max_allowed_packet in MySQL
+  ini_file:
+    path: /etc/my.cnf
+    section: mysqld
+    option: max_allowed_packet
+    value: 64M
+    no_extra_spaces: yes

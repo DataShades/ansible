@@ -30,15 +30,23 @@
   shell: amazon-linux-extras install epel -y
   args:
     creates: /etc/yum.repos.d/epel.repo
+  environment:
+    PYTHON: "python2"
 
 - name: Install packages required for use later (xfsprogs, yum-cron, expect)
   yum:
-    name: 
+    name:
       - xfsprogs
       - yum-cron
       - expect
       - git
       - gcc
+      - python-virtualenv
+      - python-boto
+      - python-pip
+      - pcre-devel
+      - patch
+      - bzip2-devel
     state: latest
   tags:
     - common_yum-install
@@ -67,3 +75,45 @@
     dest: /etc/profile.d/datashades.sh
   tags:
     - common_bash-profile
+
+- name: Create swap file
+  command: 'dd if=/dev/zero of=/var/swapFile bs=1G count=2'
+  args:
+    creates: /var/swapFile
+
+- name: Change swap file permissions
+  file:
+    path: /var/swapFile
+    owner: root
+    group: root
+    mode: 0600
+
+- name: "Check swap file type"
+  command: file /var/swapFile
+  register: swapfile
+
+- name: Make swap file
+  command: "mkswap /var/swapFile"
+  when: swapfile.stdout.find('swap file') == -1
+
+- name: Write swap entry in fstab
+  mount:
+    name: none
+    src: /var/swapFile
+    fstype: swap
+    opts: sw
+    passno: 0
+    dump: 0
+    state: present
+
+- name: Mount swap
+  command: "swapon /var/swapFile"
+  when: ansible_swaptotal_mb < 1
+
+- name: Increase max socket connections via sysctl
+  copy:
+    src: sysctl-uwsgi.conf
+    dest: /etc/sysctl.d/50-uwsgi.conf
+
+- name: Reload sysctl values
+  shell: sysctl --system

@@ -4,27 +4,50 @@
 # Java is not pre-installed on AL2 so we need to get it installed for Solr
 - name: Install Java
   yum:
-    name: java
+    name: java-1.8.0-openjdk
     state: latest
 
 # Separate steps for download and extracting are required as the install process requires the original zip file.
 # Using unarchive to retrieve a remote file doesn't store the archive locally.
-- name: Download the Solr archive
+- name: Download the Solr 6.x archive
   get_url:
-    url: https://s3-ap-southeast-2.amazonaws.com/datashades-files/solr-5.5.5.zip
+    url: https://datashades-files.s3-ap-southeast-2.amazonaws.com/solr-6.6.6.zip
     dest: /tmp
+  when: solr == '6'
 
-- name: Extract the Solr archive
+- name: Download the Solr 8.x archive
+  get_url:
+    url: https://downloads.apache.org/lucene/solr/8.11.1/solr-8.11.1.zip
+    dest: /tmp
+  when: solr == '8'
+
+- name: Extract the Solr 6.x archive
   unarchive:
-    src: /tmp/solr-5.5.5.zip
+    src: /tmp/solr-6.6.6.zip
     dest: /tmp
     remote_src: yes
+  when: solr == '6'
 
-- name: Execute the Solr install script
-  shell: ./install_solr_service.sh /tmp/solr-5.5.5.zip
+- name: Extract the Solr 8.x archive
+  unarchive:
+    src: /tmp/solr-8.11.1.zip
+    dest: /tmp
+    remote_src: yes
+  when: solr == '8'
+
+- name: Execute the Solr 6.x install script
+  shell: ./install_solr_service.sh /tmp/solr-6.6.6.zip
   args:
-    chdir: /tmp/solr-5.5.5/bin/
+    chdir: /tmp/solr-6.6.6/bin/
     creates: /var/solr
+  when: solr == '6'
+
+- name: Execute the Solr 8.x install script
+  shell: ./install_solr_service.sh /tmp/solr-8.11.1.zip
+  args:
+    chdir: /tmp/solr-8.11.1/bin/
+    creates: /var/solr
+  when: solr == '8'
 
 - name: Check to ensure the Solr directory exists.
   block:
@@ -51,38 +74,64 @@
   set_fact:
     solr_core_name: "{{ ansible_local.environment.environment_type }}_ckan"
 
-- name: Create Solr core directory
+- name: Restart Solr before attempting to create a core.
+  shell: /etc/init.d/solr restart
+
+- name: Create a new Solr core
+  shell: /opt/solr/bin/solr create -c {{ solr_core_name }}
+  args:
+    creates: /data/solr/data/{{ solr_core_name }}/core.properties
+  become: yes
+  become_user: solr
+
+- name: Remove managed schema file from new core configuration.
   file:
-    path: /data/solr/data/{{ solr_core_name }}/data
-    recurse: yes
-    owner: solr
-    group: solr
+    path: /data/solr/data/{{ solr_core_name }}/conf/managed-schema
+    state: absent
 
-- name: Create Solr core.properties file
-  lineinfile:
-    path: /data/solr/data/{{ solr_core_name }}/core.properties
-    line: 'name={{ solr_core_name }}'
-    create: yes
+- name: Copy CKAN's Sole 6.x schema.xml
+  copy:
+    src: schema_solr6_ckan-2.9.xml
+    dest: /data/solr/data/{{ solr_core_name }}/conf/schema.xml
     owner: solr
     group: solr
+  when: solr == '6'
 
-- name: Create the Solr conf directory using template archive
-  unarchive:
-    src: https://s3-ap-southeast-2.amazonaws.com/datashades-files/ckan-2.7_solr_conf.zip
-    dest: /data/solr/data/{{ solr_core_name }}/
-    remote_src: yes
+- name: Copy CKAN's Solr 8.x schema.xml
+  copy:
+    src: schema_solr8_ckan-2.9.xml
+    dest: /data/solr/data/{{ solr_core_name }}/conf/schema.xml
     owner: solr
     group: solr
-    creates: /data/solr/data/{{ solr_core_name}}/conf
+  when: solr == '8'
+
+- name: Replace solrconfig.xml with updated version compatible with CKAN.
+  copy:
+    src: solrconfig_6.6.xml
+    dest: /data/solr/data/{{ solr_core_name }}/conf/solrconfig.xml
+    force: yes
+    owner: solr
+    group: solr
+  when: solr == '6'
+
+- name: Copy JTS module to enable spatial search functionality
+  copy:
+    src: jts-core-1.16.1.jar
+    dest: /opt/solr/server/solr-webapp/webapp/WEB-INF/lib/jts-core-1.16.1.jar
+    mode: 0644
+  when: solr == '6'
+
+- name: Copy JTS module to enable spatial search functionality
+  copy:
+    src: jts-core-1.18.2.jar
+    dest: /opt/solr/server/solr-webapp/webapp/WEB-INF/lib/jts-core-1.18.2.jar
+    mode: 0644
+  when: solr == '8'
 
 - name: Enable Solr on boot
   systemd:
     name: solr
     enabled: yes
 
-# Disabled as Ansible or Systemd seems incapable of restarting/starting this service without error.
-# As long as it's enabled on boot it should not be an issue.
-#- name: Restart Solr
-#  service:
-#    name: solr
-#    state: restarted
+- name: Restart Solr
+  shell: /etc/init.d/solr restart

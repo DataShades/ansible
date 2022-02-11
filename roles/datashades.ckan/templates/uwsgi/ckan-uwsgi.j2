@@ -1,0 +1,18 @@
+[uwsgi]
+http-socket     = 127.0.0.1:8000
+uid             = ckan
+guid            = ckan
+wsgi-file       = /etc/ckan/default/wsgi.py
+chdir           = /usr/lib/ckan/default
+virtualenv      = /usr/lib/ckan/default
+module          = wsgi:application
+master          = true
+pidfile         = /tmp/%n.pid
+harakiri        = 180
+max-requests    = 5000
+vacuum          = true
+callable        = app
+lazy-apps       = true
+workers         = 4
+listen          = 256
+log-x-forwarded-for = true

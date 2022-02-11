@@ -3,9 +3,11 @@
   vars:
     host_type: 'services'
     drupal: 'no'
+    solr: '8'
   remote_user: ec2-user
   become_user: root
   become: yes
+  become_flags: -i
   pre_tasks:
     - name: Create custom facts directory
       file:
@@ -52,15 +54,14 @@
 
   roles:
     - datashades.common
-    - datashades.apache
     - datashades.services-admin
     - datashades.postgres
     - datashades.redis
     - datashades.solr
     - datashades.supervisor
-    - datashades.datapusher
+    - datashades.pyenv
     - datashades.ckan
-    - datashades.etckeeper
+    - datashades.xloader
 
   post_tasks:
     - debug:

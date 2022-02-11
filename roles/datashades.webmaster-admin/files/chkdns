@@ -1,27 +1,46 @@
 #!/bin/bash
- 
+
 echo "Refreshing DNS"
- 
+
 placement=$(wget -q -O - http://169.254.169.254/latest/meta-data/placement/availability-zone)
 region=$(echo ${placement%?})
- 
+
 myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
 zone_id=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=ZoneID" | jq '.Tags[].Value' | tr -d '"')
 dns_name=$(aws ec2 describe-tags --region $region --filters "Name=resource-id,Values=${myid}" "Name=key,Values=DNS" | jq '.Tags[].Value' | tr -d '"')
- 
+
 echo "ZoneID: $zone_id"
 echo "DNS: $dns_name"
- 
-if [ ! -z "dns_name" ]; then
- 
-    if [ ! hostname == $dns_name ]; then
-            echo "Updating hostname to $dns_name"
-            hostname $dns_name
-    fi
- 
-        if [ ! -z "zone_id" ]; then
-            pub_host=$(wget -q -O - http://169.254.169.254/latest/meta-data/public-hostname)
-            echo "Updating CNAME for $dns_name to $pub_host"
-            route53 change_record $zone_id $dns_name CNAME $pub_host 60
-        fi
+
+# Generate JSON for request
+pub_host=$(wget -q -O - http://169.254.169.254/latest/meta-data/public-hostname)
+jsonFile="/tmp/chkdns.json"
+echo "Writing JSON to $jsonFile..."
+
+cat > $jsonFile <<- EOM
+{
+    "Comment": "Update $dns_name CNAME to point to $pub_host.",
+    "Changes": [
+        {
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": "$dns_name.",
+                "Type": "CNAME",
+                "TTL": 60,
+                "ResourceRecords": [
+                    {
+                        "Value": "$pub_host"
+                    }
+                ]
+            }
+        }
+    ]
+}
+EOM
+
+if [ ! -z $jsonFile ]; then
+        echo "Updating CNAME for $dns_name to $pub_host"
+        aws route53 change-resource-record-sets --hosted-zone-id $zone_id --change-batch file:///$jsonFile
 fi
+
+rm -f $jsonFile

@@ -1,0 +1,5 @@
+---
+# tasks file for datashades.xloader
+
+- include: xloader-al2.yml
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

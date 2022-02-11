@@ -1,13 +1,13 @@
 ---
 # tasks file for datashades.redis
 #
-# This is the same process as the Amazon Linux 1 role, however this can be updated to use Redis 4.0
-# on Amazon Linux 2 in future with less effort.
+
+# Because Amazon Linux 2 provides no higher than Redis 4.x we use an RPM from Remi for EL7 
 #
-- name: Install Redis
+- name: Install Redis 6.x RPM from Remi
   yum:
-    name: redis
-    state: latest
+    name: https://datashades-files.s3-ap-southeast-2.amazonaws.com/redis-6.0.9-2.el7.remi.x86_64.rpm
+    state: present
 
 - name: Enable Redis to listen for remote connections
   lineinfile:
@@ -27,7 +27,30 @@
   notify: restart redis
   tags: redis_config
 
+- name: Enable daemonized mode
+  lineinfile:
+    path: /etc/redis.conf
+    regexp: '^daemonize no'
+    line: "daemonize yes"
+    backrefs: yes
+  notify: restart redis
+  tags: redis_config
+
+- name: Set supervised mode to systemd
+  lineinfile:
+    path: /etc/redis.conf
+    regexp: '^supervised no'
+    line: "supervised systemd"
+    backrefs: yes
+  notify: restart redis
+  tags: redis_config
+
 - name: Enable Redis on boot
   systemd:
     name: redis
     enabled: yes
+
+- name: Restart Redis
+  systemd: 
+    name: redis
+    state: restarted

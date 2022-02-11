@@ -1,0 +1,4 @@
+---
+# handlers file for datashades.datapusher
+- name: restart supervisord
+  service: name=supervisord state=restarted

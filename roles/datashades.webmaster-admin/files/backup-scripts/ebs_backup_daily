@@ -13,7 +13,7 @@ region=$(echo ${placement%?})
 
 myid=$(wget -q -O - http://169.254.169.254/latest/meta-data/instance-id)
 
-olumes=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="${myid}" --region $region)
+volumes=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="${myid}" --region $region)
 vol_id=$(echo ${volumes} | jq '.Volumes[].VolumeId' | tr -d '"')
 
 # Define new array for volume names and IDs, to be filled from the volume ID query above.

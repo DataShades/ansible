@@ -1,0 +1,80 @@
+---
+
+# Setting XLoader facts
+
+- name: Set XLoader database URL fact if dev or uat environment type.
+  set_fact:
+    ckanext_xloader_jobs_db_uri: "sqlite:////tmp/xloader_jobs.db"
+  when: ansible_local.environment.environment_type != "prod" or host_type == "standalone"
+
+- name: Set XLoader database URL fact if prod environment type.
+  set_fact:
+    ckanext_xloader_jobs_db_uri: "postgresql://ckan_default:{{ ansible_local.environment.db_password }}@{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}/ckan_default"
+  when: ansible_local.environment.environment_type == "prod" and host_type != "standalone"
+
+# XLoader configurations
+
+- name: CKAN plugins
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckan.plugins
+    value: stats text_view image_view recline_view datastore resource_proxy xloader
+
+- name: Set XLoader Jobs database URI
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.jobs_db.uri
+    value: "{{ ckanext_xloader_jobs_db_uri }}"
+
+- name: Set XLoader formats
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.formats
+    value: "csv application/csv xls application/vnd.ms-excel"
+
+- name: Set XLoader maximum content length
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.max_content_length
+    value: "1000000000"
+
+- name: Set XLoader messytables boolean
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.just_load_with_messytables
+    value: "False"
+
+- name: Set XLoader job timeout
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.job_timeout
+    value: "3600"
+
+- name: Set XLoader ignore hash boolean
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.ignore_hash
+    value: "False"
+
+- name: Set XLoader max excerpt lines
+  ini_file:
+    path: /etc/ckan/default/production.ini
+    section: app:main
+    option: ckanext.xloader.max_excerpt_lines
+    value: "100"
+
+- name: Execute full_text_function SQL for Datastore
+  shell: psql "postgresql://ckan_datastore_rw:{{ ansible_local.environment.db_password }}@{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}/ckan_datastore" < /usr/lib/ckan/default/src/ckanext-xloader/full_text_function.sql
+  when: host_type == "web"
+
+- name: Execute full_text_function SQL for Datastore if standalone instance
+  shell: psql "postgresql://ckan_datastore_rw:{{ ansible_local.environment.db_password }}@127.0.0.1/ckan_datastore" < /usr/lib/ckan/default/src/ckanext-xloader/full_text_function.sql
+  when: host_type == "standalone"
+

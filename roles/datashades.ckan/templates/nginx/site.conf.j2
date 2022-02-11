@@ -27,8 +27,8 @@ server {
 	listen 443 ssl;
 	server_name {{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }};
 
-        ssl_certificate /etc/letsencrypt/live/{{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/{{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}/privkey.pem;
+        ssl_certificate /etc/ssl/certs/{{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}/fullchain.cer;
+        ssl_certificate_key /etc/ssl/certs/{{ ansible_local.environment.environment_type }}web.{{ ansible_local.dns.hosted_zone }}/private.key;
 {% endif %}
 	root /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan;
 

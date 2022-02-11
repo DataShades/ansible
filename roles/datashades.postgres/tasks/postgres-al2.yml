@@ -1,8 +1,10 @@
 ---
 # tasks file for datashades.postgres
 
-- name: Install PostgreSQL 9.6 from Amazon Linux Extras
-  shell: amazon-linux-extras install postgresql9.6 -y
+- name: Install PostgreSQL from Amazon Linux Extras
+  shell: amazon-linux-extras install postgresql11 -y
+  environment:
+    PYTHON: "python2"
 
 - name: Install the PostgreSQL server and related packages
   yum:
@@ -24,7 +26,7 @@
         msg: "The path {{ pgsql_dir }} is a symlink already."
       when: pgsql_dir.stat.islnk is defined and pgsql_dir.stat.islnk
 
-- name: Move the PostgreSQL data directory to /data/pgsql
+- name: Move the PostgreSQL data directory to /data/pgsql and create a symlink
   block:
     - command: mv /var/lib/pgsql /data/pgsql
     - file:
@@ -35,6 +37,8 @@
 
 - name: Initialise the PostgreSQL server
   command: /usr/bin/postgresql-setup --initdb creates=/data/pgsql/data/postgresql.conf
+  args:
+    creates: /data/pgsql/initdb_postgresql.log
   tags: postgres_initdb
 
 - name: Enable the PostgreSQL server on boot
@@ -57,6 +61,16 @@
     line: 'host all all {{ ansible_local.network.vpc_cidr }} md5'
     backrefs: yes
   tags: postgres_config-files
+  when: host_type != "standalone"
+
+- name: Set the PostgreSQL auth to md5 for localhost connections.
+  lineinfile:
+    path: /data/pgsql/data/pg_hba.conf
+    regexp: 'host\s+all\s+all\s+127.0.0.1/32\s+ident'
+    line: 'host all all 127.0.0.1/32 md5'
+    backrefs: yes
+  tags: postgres_config-files
+  when: host_type == "standalone"
 
 - name: Restart PostgreSQL
   service:

@@ -1,3 +1,7 @@
-[client]
+[mysql]
+user=root
+password={{ ansible_local.environment.db_password }}
+
+[mysqldump]
 user=root
 password={{ ansible_local.environment.db_password }}

@@ -1,0 +1,6 @@
+---
+# tasks file for datashades.pyenv
+
+# Amazon Linux 2
+ - include: pyenv-al2.yml
+   when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

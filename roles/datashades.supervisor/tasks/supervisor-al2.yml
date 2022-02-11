@@ -1,34 +1,18 @@
 ---
 # tasks file for datashades.supervisor
 
-- name: Install Supervisor via pip
-  pip:
+- name: Install Supervisor
+  yum:
     name: supervisor
 
-- name: Copy Supervisor init script
-  copy:
-    src: supervisor.init
-    dest: /etc/init.d/supervisor
-    mode: 0755
-
-- name: Create supervisor.d directory
-  file:
-    path: /etc/supervisor.d
-    state: directory
-
-- name: Create Supervisor config file
-  copy:
-    src: supervisord.conf
-    dest: /etc/supervisord.conf
-  notify: restart supervisor
-
-- name: Fix default init script PREFIX path
-  lineinfile:
-    path: /etc/rc.d/init.d/supervisor
-    regexp: '^PREFIX='
-    line: 'PREFIX=/usr'
+- name: Modify Supervisor config
+  ini_file:
+    path: /etc/supervisord.conf
+    section: include
+    option: files
+    value: "supervisord.d/*.conf"
 
 - name: Enable Supervisor on boot
   systemd:
-    name: supervisor
+    name: supervisord
     enabled: yes

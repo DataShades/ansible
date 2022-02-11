@@ -11,7 +11,11 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 try:
+{% if host_type != "standalone" %}
     conn = psycopg2.connect("dbname='postgres' user='{{ postgres_user }}' host='{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}' password='{{ ansible_local.environment.db_password }}'")
+{% else %}
+    conn = psycopg2.connect("dbname='postgres' user='{{ postgres_user }}' host='127.0.0.1' password='{{ ansible_local.environment.db_password }}'")
+{% endif %}
 except:
     sys.exit(1)
 
@@ -31,7 +35,11 @@ cur.close()
 conn.close()
 
 try:
+{% if host_type != "standalone" %}
     conn = psycopg2.connect("dbname='ckan_datastore' user='ckan_datastore_rw' host='{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}' password='{{ ansible_local.environment.db_password }}'")
+{% else %}
+    conn = psycopg2.connect("dbname='ckan_datastore' user='ckan_datastore_rw' host='127.0.0.1' password='{{ ansible_local.environment.db_password }}'")
+{% endif %}
 except:
     sys.exit(1)
 
@@ -47,7 +55,11 @@ cur.close()
 conn.close()
 
 try:
+{% if host_type != "standalone" %}
     conn = psycopg2.connect("dbname='ckan_datastore' user='ckan_datastore_rw' host='{{ ansible_local.environment.environment_type }}pg.{{ ansible_local.dns.hosted_zone }}' password='{{ ansible_local.environment.db_password }}'")
+{% else %}
+    conn = psycopg2.connect("dbname='ckan_datastore' user='ckan_datastore_rw' host='127.0.0.1' password='{{ ansible_local.environment.db_password }}'")
+{% endif %}
 except:
     sys.exit(1)
 

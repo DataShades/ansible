@@ -3,7 +3,7 @@
 
 - name: Install Python Postgres
   yum:
-    name: 
+    name:
       - python-psycopg2
       - postgresql
       - postgresql-devel
@@ -26,11 +26,19 @@
 - name: Install the required setuptools version
   pip:
     name: setuptools
-    version: "20.4"
+    version: "44.1.0"
     virtualenv: /usr/lib/ckan/default
+    virtualenv_python: /opt/pyenv/shims/python
+
+- name: Upgrade Pip
+  pip:
+    name: pip
+    state: latest
+    virtualenv: /usr/lib/ckan/default
+  tags: upgrade_pip
 
 - name: Install CKAN into virtualenv
-  shell: /usr/lib/ckan/default/bin/pip install -e 'git+https://github.com/ckan/ckan.git@ckan-2.7.3#egg=ckan'
+  shell: /usr/lib/ckan/default/bin/pip install -e 'git+https://github.com/ckan/ckan.git@2.9#egg=ckan'
   args:
     creates: /usr/lib/ckan/default/src/ckan/requirements.txt
   tags: ckan_install-release
@@ -41,13 +49,18 @@
     virtualenv: /usr/lib/ckan/default
   tags: ckan_requirements
 
+- name: Install CKAN DEV requirements
+  pip:
+    requirements: /usr/lib/ckan/default/src/ckan/dev-requirements.txt
+    virtualenv: /usr/lib/ckan/default
+  tags: ckan_requirements
+
 - name: Set ownership of CKAN files to CKAN's user
   file:
     path: /usr/lib/ckan/default
     owner: ckan
     group: ckan
     recurse: yes
-  tags: ckan_worker-ownership
 
 # Do configuration tasks
 - include: ckan-configuration.yml
@@ -55,9 +68,11 @@
 - name: Install CKAN worker daemon
   template:
     src: ckan-worker.conf.j2
-    dest: /etc/supervisor.d/ckan-worker.conf
+    dest: /etc/supervisord.d/ckan-worker.conf
+    owner: ckan
+    group: ckan
 
 - name: Restart Supervisor
   systemd:
-    name: supervisor
+    name: supervisord
     state: restarted

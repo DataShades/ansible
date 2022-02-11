@@ -1,0 +1,116 @@
+---
+- name: Install MySQL
+  yum:
+    name:
+      - mariadb
+    state: latest
+
+- name: Install Composer
+  script: install-composer_sh
+  args:
+    chdir: /root
+    creates: /root/composer.phar
+
+- name: Move composer.phar to /usr/local/bin
+  command: mv /root/composer.phar /usr/local/bin/composer
+  args:
+    creates: /usr/local/bin/composer
+
+- name: Set permissions on Composer binary
+  file:
+    path: /usr/local/bin/composer
+    mode: 0755
+
+- name: Check to see if Drupal directory already exists (in case this role is being re-run).
+  block:
+    - stat:
+        path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+      register: drupal_dir
+    - debug:
+        msg: "Drupal directory does not exist, will create it and proceed normally."
+      when: not drupal_dir.stat.exists
+    - debug:
+       msg: "Drupal directory already exists, will remove and re-create it."
+      when: drupal_dir.stat.isdir is defined and drupal_dir.stat.isdir
+
+- name: Removing existing Drupal directory if it exists, to allow 'create-project' command to run in the event of a role re-run.
+  file:
+    state: absent
+    path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+  when: drupal_dir.stat.isdir is defined and drupal_dir.stat.isdir
+
+- name: Create directory for Drupal installation
+  file:
+    path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+    state: directory
+  tags: drupal_web
+
+- name: Install base Drupal into installation directory
+  composer:
+    command: create-project
+    arguments: drupal/recommended-project:{{ drupal_version }} . --no-interaction
+    working_dir: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+
+- name: Add Drupal memory optimisation package
+  composer:
+    command: require
+    arguments: zaporylie/composer-drupal-optimizations:^1.0
+    working_dir: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+
+- name: Add Drush package
+  composer:
+    command: require
+    arguments: drush/drush
+    working_dir: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan
+
+- name: Remove 'files' directory so it can be symlinked to shared storage.
+  file: 
+    state: absent
+    path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/web/sites/default/files
+
+- name: Create directories in shared content for Drupal files and private content, then symlink
+  block:
+    - file:
+        path: /var/shared_content/drupal/files
+        state: directory
+        owner: apache
+        group: apache
+        mode: 0755
+    - file:
+        path: /var/shared_content/drupal/private
+        state: directory
+        owner: apache
+        group: apache
+        mode: 0755
+    - file:
+        src: /var/shared_content/drupal/files
+        dest: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/web/sites/default/files
+        state: link
+  tags: drupal_web
+
+- name: Run Drupal intaller via Drush
+  shell: ' echo "yes" | /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/vendor/bin/drush si standard --account-name=admin --account-pass={{ ansible_local.environment.db_password }} --db-url=mysql://{{ ansible_local.environment.environment_type }}_drupal:{{ ansible_local.environment.db_password }}@{{ ansible_local.environment.environment_type }}mysql.{{ ansible_local.dns.hosted_zone }}/{{ ansible_local.environment.environment_type }}_drupal >> /root/drupal_install.log'
+  args:
+    creates: /root/drupal_install.log
+    chdir: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/
+  tags: drupal_install
+  notify: restart php-fpm
+
+- name: Insert trusted_host_pattern into settings.php if DEV/UAT environment
+  blockinfile:
+    path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/web/sites/default/settings.php
+    content: |
+      $settings['trusted_host_patterns'] = [
+        '^{{ ansible_local.environment.environment_type }}web\.{{ ansible_local.dns.hosted_zone | regex_escape () }}$',
+      ];
+  when: ansible_local.environment.environment_type != "prod"
+
+- name: Insert trusted_host_pattern into settings.php if PROD environment
+  blockinfile:
+    path: /var/www/sites/{{ ansible_local.environment.environment_type }}_ckan/web/sites/default/settings.php
+    content: |
+      $settings['trusted_host_patterns'] = [
+        '^{{ ansible_local.environment.environment_type }}\.{{ ansible_local.dns.hosted_zone | regex_escape () }}$',
+      ];
+  when: ansible_local.environment.environment_type == "prod"
+

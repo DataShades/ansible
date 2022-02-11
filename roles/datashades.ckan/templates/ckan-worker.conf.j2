@@ -9,7 +9,7 @@
 [program:ckan-worker]
 
 ; Use the full paths to the virtualenv and your configuration file here.
-command=/usr/lib/ckan/default/bin/paster --plugin=ckan jobs worker --config=/etc/ckan/default/production.ini
+command=/usr/lib/ckan/default/bin/ckan -c /etc/ckan/default/production.ini jobs worker
 
 
 ; User the worker runs as.
@@ -23,8 +23,8 @@ process_name=%(program_name)s-%(process_num)02d
 
 
 ; Log files.
-stdout_logfile=/var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan/jobs-worker.log
-stderr_logfile=/var/log/httpd/{{ ansible_local.environment.environment_type }}_ckan/jobs-worker.log
+stdout_logfile=/var/log/{{ ansible_local.environment.environment_type }}_ckan/jobs-worker.log
+stderr_logfile=/var/log/{{ ansible_local.environment.environment_type }}_ckan/jobs-worker.log
 
 
 ; Make sure that the worker is started on system start and automatically
